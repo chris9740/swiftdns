@@ -44,10 +44,8 @@ pub mod blacklist {
                         }
 
                         if WildMatch::new(&line).matches(name) {
-                            let filename = rules_path.to_string_lossy();
-
                             return Some(BlacklistEntry {
-                                file: filename.to_string(),
+                                file: full_path,
                                 pattern: line.to_string(),
                                 line: index + 1,
                             });
