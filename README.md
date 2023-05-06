@@ -64,7 +64,7 @@ tiktok*.com
 
 -   ### Start
 
-    Start the service at 127.0.0.53:53 (or specify address with `--address <socketaddr>`)
+    Normally you would want to start it with `systemctl start swiftdns`, but you can start the listener in the foreground at 127.0.0.53:53 (or specify address with `--address <socketaddr>`).
 
     ```bash
     $ swiftdns start
