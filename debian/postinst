@@ -1,0 +1,10 @@
+#!/bin/bash
+
+#DEBHELPER#
+
+mkdir -p /etc/swiftdns/rules
+
+chown root:root -R /etc/swiftdns
+chmod 755 -R /etc/swiftdns
+
+exit 0

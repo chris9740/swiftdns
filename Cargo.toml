@@ -1,0 +1,27 @@
+[package]
+name = "swiftdns"
+version = "0.1.0"
+authors = ["chris9740"]
+edition = "2021"
+description = "A DNS client with blacklisting that resolves from Cloudflare DOH"
+license = "MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+reqwest = { version = "0.11", features = ["blocking", "json"] }
+serde = { version = "1.0.159", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+clap = { version = "4.0", features = ["derive", "cargo"] }
+strum = { version = "0.24.1", features = ["derive"] }
+urlencoding = "2.1.2"
+dns-message-parser = "0.7.0"
+bytes = "1.4.0"
+serde_json = "1.0.96"
+rand = "0.8.5"
+wildmatch = "2.1.1"
+cargo-deb = "1.43.0"
+
+[package.metadata.deb]
+maintainer-scripts = "debian/"
+systemd-units = { enable = true }

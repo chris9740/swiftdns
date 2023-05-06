@@ -1,0 +1,8 @@
+[Unit]
+Description=A DNS client with blacklisting that resolves from Cloudflare DOH
+
+[Service]
+ExecStart=/usr/bin/swiftdns start
+
+[Install]
+WantedBy=multi-user.target

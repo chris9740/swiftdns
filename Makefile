@@ -1,0 +1,2 @@
+deb:
+	cargo-deb

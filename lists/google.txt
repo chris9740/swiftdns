@@ -1,0 +1,17 @@
+*google.com
+*google-analytics.com
+admob.com
+adsensecustomsearchads.com
+adwords.com
+doubleclick.net
+googleadservices.com
+googleapis.com
+googlesyndication.com
+googletagmanager.com
+googletagservices.com
+googletraveladservices.com
+*googleusercontent.com
+*gstatic.com
+urchin.com
+youtube.com
+ytimg.com
