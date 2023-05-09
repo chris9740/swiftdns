@@ -59,3 +59,25 @@ pub mod blacklist {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::blacklist;
+
+    #[test]
+    fn filters_bad_domains() {
+        assert!(blacklist::find("google.com").is_some());
+        assert!(blacklist::find("maps.google.com").is_some());
+        assert!(blacklist::find("google-analytics.com").is_some());
+        assert!(blacklist::find("tiktokv.com").is_some());
+        assert!(blacklist::find("facebook.com").is_some());
+        assert!(blacklist::find("doubleclick.net").is_some());
+    }
+
+    #[test]
+    fn allows_good_domains() {
+        assert!(blacklist::find("duckduckgo.com").is_none());
+        assert!(blacklist::find("signal.org").is_none());
+        assert!(blacklist::find("tutanota.com").is_none());
+    }
+}

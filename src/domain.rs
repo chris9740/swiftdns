@@ -18,3 +18,13 @@ impl From<&str> for Domain {
         Domain { name }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::domain::Domain;
+
+    #[test]
+    fn parses_domain() {
+        assert_eq!(Domain::from("signal.org.").name, "signal.org");
+    }
+}
