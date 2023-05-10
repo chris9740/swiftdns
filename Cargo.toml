@@ -1,6 +1,6 @@
 [package]
 name = "swiftdns"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["chris9740"]
 edition = "2021"
 description = "A DNS client with blacklisting that resolves from Cloudflare DOH"
