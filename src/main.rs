@@ -129,7 +129,7 @@ async fn main() {
                     }
                 };
 
-                if !was_cached {
+                if !was_cached && response.answer.is_some() {
                     cache.set(question, &response);
                 }
 
