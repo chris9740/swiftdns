@@ -56,7 +56,7 @@ async fn main() {
             let mut cache = Cache::new();
 
             let debug_addr = "127.0.0.1:5053".parse::<SocketAddr>().unwrap();
-            let release_addr = "127.0.0.54:53".parse::<SocketAddr>().unwrap();
+            let release_addr = "127.0.0.53:53".parse::<SocketAddr>().unwrap();
 
             let addr = {
                 if let Some(specified_addr) = start_match.get_one::<SocketAddr>("address") {
