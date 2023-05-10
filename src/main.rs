@@ -4,6 +4,7 @@ extern crate log;
 use std::net::{SocketAddr, UdpSocket};
 
 use cache::Cache;
+use chrono::Utc;
 use dns::RecordType;
 use dns_message_parser::{Dns, RCode};
 use domain::Domain;
@@ -132,6 +133,8 @@ async fn main() {
                 let cached_response = cache.get(&question);
                 let was_cached = cached_response.is_some();
 
+                let start_time = Utc::now().time();
+
                 let response = {
                     if was_cached {
                         let unwrapped = cached_response.unwrap();
@@ -141,6 +144,9 @@ async fn main() {
                         dns::resolve(&client, &domain.name, &record_type).await.unwrap()
                     }
                 };
+
+                let end_time = Utc::now().time();
+                let total_time = end_time - start_time;
 
                 if !was_cached && response.answer.is_some() {
                     cache.set(question, &response);
@@ -155,7 +161,7 @@ async fn main() {
                         socket.send_to(&encoded, src).unwrap();
 
                         info!(
-                            "successfully resolved `{}` record for `{}` ({})",
+                            "successfully resolved `{}` record for `{}` ({}, {}ms)",
                             record_type.to_string(),
                             &domain.name,
                             {
@@ -164,7 +170,8 @@ async fn main() {
                                 } else {
                                     "not cached"
                                 }
-                            }
+                            },
+                            total_time.num_milliseconds()
                         );
                     } else {
                         warn!(
