@@ -126,9 +126,7 @@ pub fn format_answers(answers: &Vec<DnsAnswer>) -> Vec<RR> {
     group
 }
 
-pub fn encode(query: Dns, answers: &Vec<DnsAnswer>) -> Result<bytes::BytesMut, ()> {
-    let answers = format_answers(answers);
-
+pub fn encode(query: Dns) -> Result<bytes::BytesMut, ()> {
     let dns = Dns::encode(&Dns {
         id: query.id,
         flags: Flags {
@@ -142,10 +140,10 @@ pub fn encode(query: Dns, answers: &Vec<DnsAnswer>) -> Result<bytes::BytesMut, (
             cd: query.flags.cd,
             rcode: query.flags.rcode,
         },
-        additionals: Vec::new(),
-        authorities: Vec::new(),
+        additionals: query.additionals,
+        authorities: query.authorities,
         questions: query.questions,
-        answers: answers,
+        answers: query.answers,
     })
     .unwrap();
 

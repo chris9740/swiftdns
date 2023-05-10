@@ -80,7 +80,7 @@ async fn main() {
             loop {
                 let mut buf = [0; 512];
                 let (amt, src) = socket.recv_from(&mut buf).unwrap();
-                let query = dns::decode(&buf[..amt]).unwrap();
+                let mut query = dns::decode(&buf[..amt]).unwrap();
 
                 let question = query.questions.get(0).unwrap();
                 let domain = Domain::from(question.domain_name.to_string().as_str());
@@ -104,7 +104,7 @@ async fn main() {
                         authorities: Vec::new(),
                     };
 
-                    let response = Dns::encode(&dns).unwrap();
+                    let response = dns::encode(dns).unwrap();
 
                     socket.send_to(&response, src).unwrap();
 
@@ -134,7 +134,9 @@ async fn main() {
                 }
 
                 if let Some(answers) = response.answer {
-                    let encoding_result = dns::encode(query, &answers);
+                    query.answers = dns::format_answers(&answers);
+
+                    let encoding_result = dns::encode(query);
 
                     if let Ok(encoded) = encoding_result {
                         socket.send_to(&encoded, src).unwrap();
@@ -173,7 +175,7 @@ async fn main() {
                         authorities: Vec::new(),
                     };
 
-                    let encoded = Dns::encode(&dns).unwrap();
+                    let encoded = dns::encode(dns).unwrap();
 
                     socket.send_to(&encoded, src).unwrap();
 
