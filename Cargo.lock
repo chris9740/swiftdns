@@ -1332,6 +1332,8 @@ dependencies = [
  "chrono",
  "clap",
  "dns-message-parser",
+ "env_logger",
+ "log",
  "rand",
  "reqwest",
  "serde",
