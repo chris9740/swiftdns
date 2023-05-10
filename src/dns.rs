@@ -1,5 +1,6 @@
 use std::{
     error::Error,
+    fmt::Display,
     net::{Ipv4Addr, Ipv6Addr},
     str::FromStr,
 };
@@ -10,18 +11,29 @@ use dns_message_parser::{
 };
 use strum::{EnumIter, IntoEnumIterator};
 
-#[derive(Debug, EnumIter, Clone)]
+#[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq)]
 pub enum RecordType {
     A,
     AAAA,
 }
 
 impl RecordType {
-    pub fn value(&self) -> &str {
+    pub fn value(&self) -> u16 {
         match self {
+            RecordType::A => 1,
+            RecordType::AAAA => 28,
+        }
+    }
+}
+
+impl Display for RecordType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
             RecordType::A => "A",
             RecordType::AAAA => "AAAA",
-        }
+        };
+
+        f.write_str(str)
     }
 }
 
@@ -29,7 +41,7 @@ impl FromStr for RecordType {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         for record_type in RecordType::iter() {
             let input = s.to_lowercase();
-            let record_type_value = record_type.value().to_lowercase();
+            let record_type_value = record_type.to_string().to_lowercase();
 
             if input == record_type_value {
                 return Ok(record_type);
@@ -46,12 +58,12 @@ impl From<&str> for RecordType {
     fn from(value: &str) -> RecordType {
         match RecordType::from_str(value) {
             Ok(record_type) => record_type,
-            Err(_) => panic!("Invalid record type"),
+            Err(_) => panic!("Invalid record type `{}`", value),
         }
     }
 }
 
-#[derive(crate::Deserialize, Debug)]
+#[derive(crate::Deserialize, Debug, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct DnsResponse {
     pub status: u8,
@@ -70,7 +82,7 @@ pub struct DnsResponse {
     pub authority: Option<Vec<DnsAnswer>>,
 }
 
-#[derive(crate::Deserialize, Debug)]
+#[derive(crate::Deserialize, Debug, Clone)]
 pub struct DnsAnswer {
     #[serde(rename = "name")]
     pub domain_name: String,
@@ -80,7 +92,7 @@ pub struct DnsAnswer {
     pub data: String,
 }
 
-#[derive(crate::Deserialize, Debug)]
+#[derive(crate::Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct DnsQuestion {
     pub name: String,
     pub r#type: u16,
@@ -96,13 +108,13 @@ pub fn format_answers(answers: &Vec<DnsAnswer>) -> Vec<RR> {
     let mut group = Vec::new();
 
     for answer in answers {
-        if answer.r#type == 1 {
+        if answer.r#type == RecordType::A.value() {
             group.push(RR::A(rr::A {
                 domain_name: answer.domain_name.parse::<DomainName>().unwrap(),
                 ttl: answer.ttl,
                 ipv4_addr: answer.data.parse::<Ipv4Addr>().unwrap(),
             }));
-        } else if answer.r#type == 28 {
+        } else if answer.r#type == RecordType::AAAA.value() {
             group.push(RR::AAAA(rr::AAAA {
                 domain_name: answer.domain_name.parse::<DomainName>().unwrap(),
                 ttl: answer.ttl,
@@ -148,7 +160,7 @@ pub async fn resolve(
     let url = format!(
         "https://1.1.1.1/dns-query?name={}&type={}",
         urlencoding::encode(&name),
-        &record_type.value()
+        &record_type.to_string()
     );
 
     let res = client

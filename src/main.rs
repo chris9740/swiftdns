@@ -1,5 +1,6 @@
 use std::net::{SocketAddr, UdpSocket};
 
+use cache::Cache;
 use dns::RecordType;
 use dns_message_parser::{Dns, RCode};
 use domain::Domain;
@@ -8,6 +9,7 @@ use reqwest;
 use clap::{crate_version, Arg, Command};
 use serde::Deserialize;
 
+mod cache;
 mod dns;
 mod domain;
 mod filter;
@@ -43,7 +45,7 @@ async fn main() {
                     Arg::new("type")
                         .short('t')
                         .help("The type of record to resolve (A, AAAA)")
-                        .default_value(dns::RecordType::A.value())
+                        .default_value("A")
                         .value_parser(clap::value_parser!(RecordType)),
                 ),
         )
@@ -51,6 +53,8 @@ async fn main() {
 
     match matches.subcommand() {
         Some(("start", start_match)) => {
+            let mut cache = Cache::new();
+
             let debug_addr = "127.0.0.1:5053".parse::<SocketAddr>().unwrap();
             let release_addr = "127.0.0.54:53".parse::<SocketAddr>().unwrap();
 
@@ -107,7 +111,27 @@ async fn main() {
                     continue;
                 }
 
-                let response = dns::resolve(&client, &domain.name, &record_type).await.unwrap();
+                let question = dns::DnsQuestion {
+                    name: domain.name.clone(),
+                    r#type: record_type.value()
+                };
+
+                let cached_response = cache.get(&question);
+                let was_cached = cached_response.is_some();
+
+                let response = {
+                    if was_cached {
+                        let unwrapped = cached_response.unwrap();
+
+                        unwrapped.response.clone()
+                    } else {
+                        dns::resolve(&client, &domain.name, &record_type).await.unwrap()
+                    }
+                };
+
+                if !was_cached {
+                    cache.set(question, &response);
+                }
 
                 if let Some(answers) = response.answer {
                     let encoding_result = dns::encode(query, &answers);
@@ -116,14 +140,21 @@ async fn main() {
                         socket.send_to(&encoded, src).unwrap();
 
                         println!(
-                            "successfully resolved `{}` record for `{}`",
-                            record_type.value(),
-                            &domain.name
+                            "successfully resolved `{}` record for `{}` ({})",
+                            record_type.to_string(),
+                            &domain.name,
+                            {
+                                if was_cached {
+                                    "cached"
+                                } else {
+                                    "not cached"
+                                }
+                            }
                         );
                     } else {
                         println!(
                             "notice: silently ignoring resolution of `{}` record for `{}`",
-                            record_type.value(),
+                            record_type.to_string(),
                             &domain.name
                         );
                         println!("debug: {:?}", encoding_result);
@@ -148,7 +179,7 @@ async fn main() {
 
                     println!(
                         "error: no `{}` record exists for {}",
-                        record_type.value(),
+                        record_type.to_string(),
                         domain.name
                     );
                 }
@@ -177,14 +208,14 @@ async fn main() {
 
                 println!(
                     "success: the `{}` record for `{}` was resolved to {}",
-                    record_type.value(),
+                    record_type.to_string(),
                     domain.name,
                     record.data
                 );
             } else {
                 println!(
                     "error: no `{}` record exists for {}",
-                    record_type.value(),
+                    record_type.to_string(),
                     domain.name
                 );
             }
