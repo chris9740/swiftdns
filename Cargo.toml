@@ -24,7 +24,16 @@ cargo-deb = "1.43.0"
 chrono = "0.4.24"
 log = "0.4.17"
 env_logger = "0.10.0"
+confy = "0.5.1"
 
 [package.metadata.deb]
 maintainer-scripts = "debian/"
 systemd-units = { enable = true }
+depends = ""
+assets = [
+    [
+        "config/default-config.toml",
+        "/etc/swiftdns/config/default-config.toml",
+        "644",
+    ],
+]
