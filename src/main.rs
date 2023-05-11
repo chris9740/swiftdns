@@ -1,7 +1,10 @@
 #[macro_use]
 extern crate log;
 
-use std::net::{SocketAddr, UdpSocket};
+use std::{
+    error::Error,
+    net::{SocketAddr, UdpSocket},
+};
 
 use cache::Cache;
 use chrono::Utc;
@@ -16,19 +19,23 @@ use clap::{crate_version, Arg, Command};
 use serde::Deserialize;
 
 mod cache;
+mod config;
 mod dns;
 mod domain;
 mod filter;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     let log_level = if cfg!(debug_assertions) {
-        LevelFilter::max()
+        LevelFilter::Debug
     } else {
         LevelFilter::Info
     };
 
     Builder::new().filter_level(log_level).init();
+
+    // This will validate the config
+    config::get_config().expect("Config should be valid");
 
     let client = reqwest::Client::new();
 
@@ -220,7 +227,7 @@ async fn main() {
                     blacklisted.line
                 );
 
-                return;
+                return Ok(());
             }
 
             let response = dns::resolve(&client, &domain.name, &record_type).await.unwrap();
@@ -243,5 +250,7 @@ async fn main() {
             }
         }
         _ => panic!("Something went wrong. A subcommand was provided and accepted by clap but not caught by match"),
-    }
+    };
+
+    return Ok(());
 }

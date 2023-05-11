@@ -11,6 +11,8 @@ use dns_message_parser::{
 };
 use strum::{EnumIter, IntoEnumIterator};
 
+use crate::config;
+
 #[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq)]
 pub enum RecordType {
     A,
@@ -155,8 +157,12 @@ pub async fn resolve(
     name: &str,
     record_type: &RecordType,
 ) -> Result<DnsResponse, Box<dyn Error>> {
+    let config = config::get_config().unwrap();
+    let resolver_ip = config.mode.ip_address();
+
     let url = format!(
-        "https://1.1.1.1/dns-query?name={}&type={}",
+        "https://{}/dns-query?name={}&type={}",
+        resolver_ip,
         urlencoding::encode(&name),
         &record_type.to_string()
     );

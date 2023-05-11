@@ -1,8 +1,10 @@
 pub mod blacklist {
+    use std::fs;
     use std::fs::File;
     use std::io::{prelude::*, BufReader};
-    use std::{fs, path::Path};
     use wildmatch::WildMatch;
+
+    use crate::config;
 
     pub struct BlacklistEntry {
         pub file: String,
@@ -11,11 +13,7 @@ pub mod blacklist {
     }
 
     pub fn find(name: &str) -> Option<BlacklistEntry> {
-        let rules_path = if cfg!(debug_assertions) {
-            Path::new("./rules").to_path_buf()
-        } else {
-            Path::new("/etc/swiftdns/rules").to_path_buf()
-        };
+        let rules_path = config::get_path().join("rules");
 
         match fs::read_dir(&rules_path) {
             Ok(dir) => {

@@ -60,6 +60,16 @@ tiktok*.com
 
 **Tip** - Test your rules with `swiftdns resolve example.com`. If done correctly, trying to resolve a blacklisted domain should give you an error.
 
+## Configuration
+
+You can configure SwiftDNS to behave to your liking. To change a setting, simply open `/etc/swiftdns/config/default-config.toml` in a text editor (note that this requires root privileges). After saving your configuration file, run `systemctl restart swiftdns` to clear the cache.
+
+The different configuration options have more elaborate documentation within the config file.
+
+| Key  | Default    | Value(s)                           | Description                             |
+| ---- | ---------- | ---------------------------------- | --------------------------------------- |
+| mode | `Standard` | One of `Standard`, `Safe`, `Clean` | Configure which mode to run SwiftDNS in |
+
 ## Commands
 
 -   ### Start
