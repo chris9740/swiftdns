@@ -28,3 +28,15 @@ env_logger = "0.10.0"
 [package.metadata.deb]
 maintainer-scripts = "debian/"
 systemd-units = { enable = true }
+assets = [
+    [
+        "target/release/swiftdns",
+        "/usr/bin/",
+        "755",
+    ],
+    [
+        "assets/capabilities.conf",
+        "/etc/systemd/system/swiftdns.service.d/capabilities.conf",
+        "644",
+    ],
+]

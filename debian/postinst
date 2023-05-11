@@ -2,9 +2,12 @@
 
 #DEBHELPER#
 
+# Create system-user "swiftdns" along with a group with the same name
+adduser --system --group --quiet swiftdns
+
 mkdir -p /etc/swiftdns/rules
 
-chown root:root -R /etc/swiftdns
+chown swiftdns:swiftdns -R /etc/swiftdns
 chmod 755 -R /etc/swiftdns
 
 exit 0
