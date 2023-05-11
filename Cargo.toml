@@ -32,8 +32,8 @@ systemd-units = { enable = true }
 depends = ""
 assets = [
     [
-        "config/default-config.toml",
-        "/etc/swiftdns/config/default-config.toml",
+        "assets/default-config.toml",
+        "/etc/swiftdns/conf.d/default-config.toml",
         "644",
     ],
 ]
