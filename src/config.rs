@@ -1,6 +1,7 @@
 use std::{
     env,
     error::Error,
+    net::SocketAddr,
     path::{Path, PathBuf},
 };
 
@@ -41,18 +42,20 @@ impl From<&str> for Mode {
 #[derive(Serialize, Deserialize)]
 pub struct SwiftConfig {
     pub mode: Mode,
+    pub address: SocketAddr,
 }
 
 impl std::default::Default for SwiftConfig {
     fn default() -> Self {
         Self {
             mode: Mode::Standard,
+            address: "127.0.0.53:53".parse().unwrap(),
         }
     }
 }
 
 pub fn get_config() -> Result<SwiftConfig, Box<dyn Error>> {
-    let config_path = get_path().join("config");
+    let config_path = get_path().join("conf.d");
     let config: SwiftConfig = confy::load(&config_path.to_string_lossy(), None)?;
 
     Ok(config)

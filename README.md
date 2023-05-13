@@ -62,13 +62,14 @@ tiktok*.com
 
 ## Configuration
 
-You can configure SwiftDNS to behave to your liking. To change a setting, simply open `/etc/swiftdns/config/default-config.toml` in a text editor (note that this requires root privileges). After saving your configuration file, run `systemctl restart swiftdns` to clear the cache.
+You can configure SwiftDNS to behave to your liking. To change a setting, simply open `/etc/swiftdns/conf.d/default-config.toml` in a text editor (note that this requires root privileges). After saving your configuration file, run `systemctl restart swiftdns` to clear the cache.
 
 The different configuration options have more elaborate documentation within the config file.
 
-| Key  | Default    | Value(s)                           | Description                             |
-| ---- | ---------- | ---------------------------------- | --------------------------------------- |
-| mode | `Standard` | One of `Standard`, `Safe`, `Clean` | Configure which mode to run SwiftDNS in |
+| Key     | Default         | Value(s)                           | Description                             |
+| ------- | --------------- | ---------------------------------- | --------------------------------------- |
+| mode    | `Standard`      | One of `Standard`, `Safe`, `Clean` | Configure which mode to run SwiftDNS in |
+| address | `127.0.0.53:53` | A socket address (with port)       | The address to bind the listener to     |
 
 ## Commands
 

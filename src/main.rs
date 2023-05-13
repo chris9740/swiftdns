@@ -74,10 +74,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     match matches.subcommand() {
         Some(("start", start_match)) => {
+            let conf = config::get_config().unwrap();
             let mut cache = Cache::new();
 
             let debug_addr = "127.0.0.1:5053".parse::<SocketAddr>().unwrap();
-            let release_addr = "127.0.0.53:53".parse::<SocketAddr>().unwrap();
+            let release_addr = conf.address;
 
             let addr = {
                 if let Some(specified_addr) = start_match.get_one::<SocketAddr>("address") {
