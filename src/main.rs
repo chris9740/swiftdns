@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             let socket = match UdpSocket::bind(addr) {
                 Ok(socket) => socket,
-                Err(_) => panic!("failed to bind listener on addr `{}`", addr.to_string()),
+                Err(err) => panic!("failed to bind listener on addr `{}` ({})", addr.to_string(), err),
             };
 
             info!("listening on {addr}");
