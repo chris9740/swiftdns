@@ -11,6 +11,8 @@ use dns_message_parser::{
 };
 use strum::{EnumIter, IntoEnumIterator};
 
+use crate::config;
+
 #[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq)]
 pub enum RecordType {
     A,
@@ -126,9 +128,7 @@ pub fn format_answers(answers: &Vec<DnsAnswer>) -> Vec<RR> {
     group
 }
 
-pub fn encode(query: Dns, answers: &Vec<DnsAnswer>) -> Result<bytes::BytesMut, ()> {
-    let answers = format_answers(answers);
-
+pub fn encode(query: Dns) -> Result<bytes::BytesMut, ()> {
     let dns = Dns::encode(&Dns {
         id: query.id,
         flags: Flags {
@@ -142,10 +142,10 @@ pub fn encode(query: Dns, answers: &Vec<DnsAnswer>) -> Result<bytes::BytesMut, (
             cd: query.flags.cd,
             rcode: query.flags.rcode,
         },
-        additionals: Vec::new(),
-        authorities: Vec::new(),
+        additionals: query.additionals,
+        authorities: query.authorities,
         questions: query.questions,
-        answers: answers,
+        answers: query.answers,
     })
     .unwrap();
 
@@ -157,8 +157,12 @@ pub async fn resolve(
     name: &str,
     record_type: &RecordType,
 ) -> Result<DnsResponse, Box<dyn Error>> {
+    let config = config::get_config().unwrap();
+    let resolver_ip = config.mode.ip_address();
+
     let url = format!(
-        "https://1.1.1.1/dns-query?name={}&type={}",
+        "https://{}/dns-query?name={}&type={}",
+        resolver_ip,
         urlencoding::encode(&name),
         &record_type.to_string()
     );

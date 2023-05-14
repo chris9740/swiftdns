@@ -1,21 +1,42 @@
-use std::net::{SocketAddr, UdpSocket};
+#[macro_use]
+extern crate log;
+
+use std::{
+    error::Error,
+    net::{SocketAddr, UdpSocket},
+};
 
 use cache::Cache;
+use chrono::Utc;
 use dns::RecordType;
 use dns_message_parser::{Dns, RCode};
 use domain::Domain;
+use env_logger::Builder;
+use log::LevelFilter;
 use reqwest;
 
 use clap::{crate_version, Arg, Command};
 use serde::Deserialize;
 
 mod cache;
+mod config;
 mod dns;
 mod domain;
 mod filter;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
+    let log_level = if cfg!(debug_assertions) {
+        LevelFilter::Debug
+    } else {
+        LevelFilter::Info
+    };
+
+    Builder::new().filter_level(log_level).init();
+
+    // This will validate the config
+    config::get_config().expect("Config should be valid");
+
     let client = reqwest::Client::new();
 
     let matches = Command::new("swiftdns")
@@ -53,10 +74,11 @@ async fn main() {
 
     match matches.subcommand() {
         Some(("start", start_match)) => {
+            let conf = config::get_config().unwrap();
             let mut cache = Cache::new();
 
             let debug_addr = "127.0.0.1:5053".parse::<SocketAddr>().unwrap();
-            let release_addr = "127.0.0.54:53".parse::<SocketAddr>().unwrap();
+            let release_addr = conf.address;
 
             let addr = {
                 if let Some(specified_addr) = start_match.get_one::<SocketAddr>("address") {
@@ -72,26 +94,26 @@ async fn main() {
 
             let socket = match UdpSocket::bind(addr) {
                 Ok(socket) => socket,
-                Err(_) => panic!("failed to bind listener on addr `{}`", addr.to_string()),
+                Err(err) => panic!("failed to bind listener on addr `{}` ({})", addr.to_string(), err),
             };
 
-            println!("Listening on {addr}");
+            info!("listening on {addr}");
 
             loop {
                 let mut buf = [0; 512];
                 let (amt, src) = socket.recv_from(&mut buf).unwrap();
-                let query = dns::decode(&buf[..amt]).unwrap();
+                let mut query = dns::decode(&buf[..amt]).unwrap();
 
                 let question = query.questions.get(0).unwrap();
                 let domain = Domain::from(question.domain_name.to_string().as_str());
 
                 let q_type = question.q_type.to_string();
-                let record_type: RecordType = q_type.parse().unwrap();
+                let record_type: RecordType = q_type.parse().unwrap_or(RecordType::A);
 
                 if let Some(_) = filter::blacklist::find(&domain.name) {
                     let mut flags = query.flags.clone();
 
-                    println!("`{}` has been blacklisted, refusing", &domain.name);
+                    info!("`{}` has been blacklisted, refusing", &domain.name);
 
                     flags.rcode = RCode::Refused;
 
@@ -104,7 +126,7 @@ async fn main() {
                         authorities: Vec::new(),
                     };
 
-                    let response = Dns::encode(&dns).unwrap();
+                    let response = dns::encode(dns).unwrap();
 
                     socket.send_to(&response, src).unwrap();
 
@@ -119,6 +141,8 @@ async fn main() {
                 let cached_response = cache.get(&question);
                 let was_cached = cached_response.is_some();
 
+                let start_time = Utc::now().time();
+
                 let response = {
                     if was_cached {
                         let unwrapped = cached_response.unwrap();
@@ -129,18 +153,23 @@ async fn main() {
                     }
                 };
 
+                let end_time = Utc::now().time();
+                let total_time = end_time - start_time;
+
                 if !was_cached && response.answer.is_some() {
                     cache.set(question, &response);
                 }
 
                 if let Some(answers) = response.answer {
-                    let encoding_result = dns::encode(query, &answers);
+                    query.answers = dns::format_answers(&answers);
+
+                    let encoding_result = dns::encode(query);
 
                     if let Ok(encoded) = encoding_result {
                         socket.send_to(&encoded, src).unwrap();
 
-                        println!(
-                            "successfully resolved `{}` record for `{}` ({})",
+                        info!(
+                            "successfully resolved `{}` record for `{}` ({}, {}ms)",
                             record_type.to_string(),
                             &domain.name,
                             {
@@ -149,15 +178,16 @@ async fn main() {
                                 } else {
                                     "not cached"
                                 }
-                            }
+                            },
+                            total_time.num_milliseconds()
                         );
                     } else {
-                        println!(
+                        warn!(
                             "notice: silently ignoring resolution of `{}` record for `{}`",
                             record_type.to_string(),
                             &domain.name
                         );
-                        println!("debug: {:?}", encoding_result);
+                        debug!("something went wrong when encoding: {:?}", encoding_result);
                     }
                 } else {
                     let mut flags = query.flags.clone();
@@ -173,12 +203,12 @@ async fn main() {
                         authorities: Vec::new(),
                     };
 
-                    let encoded = Dns::encode(&dns).unwrap();
+                    let encoded = dns::encode(dns).unwrap();
 
                     socket.send_to(&encoded, src).unwrap();
 
-                    println!(
-                        "error: no `{}` record exists for {}",
+                    info!(
+                        "no `{}` record exists for {}",
                         record_type.to_string(),
                         domain.name
                     );
@@ -190,15 +220,15 @@ async fn main() {
             let record_type = resolve_match.get_one::<RecordType>("type").unwrap();
 
             if let Some(blacklisted) = filter::blacklist::find(&domain.name) {
-                println!(
-                    "error: the domain `{}` has been blacklisted (pattern `{}`, {}:{}), refusing to resolve.",
+                info!(
+                    "the domain `{}` has been blacklisted (pattern `{}`, {}:{}), refusing to resolve.",
                     domain.name,
                     blacklisted.pattern,
                     blacklisted.file,
                     blacklisted.line
                 );
 
-                return;
+                return Ok(());
             }
 
             let response = dns::resolve(&client, &domain.name, &record_type).await.unwrap();
@@ -206,20 +236,22 @@ async fn main() {
             if let Some(answer) = response.answer {
                 let record = answer.last().expect("Answer should have at least 1 entry");
 
-                println!(
-                    "success: the `{}` record for `{}` was resolved to {}",
+                info!(
+                    "the `{}` record for `{}` was resolved to {}",
                     record_type.to_string(),
                     domain.name,
                     record.data
                 );
             } else {
-                println!(
-                    "error: no `{}` record exists for {}",
+                info!(
+                    "no `{}` record exists for {}",
                     record_type.to_string(),
                     domain.name
                 );
             }
         }
         _ => panic!("Something went wrong. A subcommand was provided and accepted by clap but not caught by match"),
-    }
+    };
+
+    return Ok(());
 }

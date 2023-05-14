@@ -30,6 +30,8 @@ impl Cache {
         let first_answer = response.answer.as_ref().unwrap().get(0);
         let ttl_seconds = first_answer.unwrap().ttl;
 
+        debug!("ttl for `{}` is {} seconds", question.name, ttl_seconds);
+
         let valid_until = Utc::now() + Duration::seconds(ttl_seconds.into());
 
         let entry = CacheEntry {

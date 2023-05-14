@@ -2,6 +2,8 @@
 Description=A DNS client with blacklisting that resolves from Cloudflare DOH
 
 [Service]
+User=swiftdns
+Group=swiftdns
 ExecStart=/usr/bin/swiftdns start
 Restart=on-failure
 RestartSec=3s
