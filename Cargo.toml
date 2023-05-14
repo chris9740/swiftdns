@@ -47,3 +47,4 @@ assets = [
         "644",
     ],
 ]
+conf-files = ["/etc/swiftdns/conf.d/default-config.toml"]
