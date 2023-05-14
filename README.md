@@ -49,7 +49,7 @@ If you want to block all subdomains, including the root domain, you can use the 
 **.example.com
 ```
 
-This rule will block any request for `example.com` as well as all subdomains of `example.com`.
+This rule will block any request for `example.com` as well as all subdomains of `example.com`. Note that, unlike `*.`, the `**.` pattern can only exist at the beginning of the line.
 
 **Tip** - Test your rules with `swiftdns resolve example.com`. If done correctly, trying to resolve a blacklisted domain should give you an error.
 
