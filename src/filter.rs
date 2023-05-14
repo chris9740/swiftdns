@@ -41,6 +41,26 @@ pub mod blacklist {
                             continue;
                         }
 
+                        // This is a globstar pattern, a shorthand for blacklisting a domain and all it's subdomains.
+                        //
+                        // Example:
+                        // The rule `**.example.com` will be "unwrapped" to two distinct rules:
+                        // `example.com and *.example.com`
+                        if line.starts_with("**.") {
+                            let domain_pattern = &line[3..];
+                            let subdomain_pattern = format!("*.{}", domain_pattern);
+
+                            if WildMatch::new(domain_pattern).matches(name)
+                                || WildMatch::new(&subdomain_pattern).matches(name)
+                            {
+                                return Some(BlacklistEntry {
+                                    file: full_path,
+                                    pattern: line.to_string(),
+                                    line: index + 1,
+                                });
+                            }
+                        }
+
                         if WildMatch::new(&line).matches(name) {
                             return Some(BlacklistEntry {
                                 file: full_path,
