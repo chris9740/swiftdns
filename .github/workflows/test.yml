@@ -1,0 +1,25 @@
+name: Rust Testing
+
+on:
+    push:
+        branches: [master, dev, feat/*]
+    pull_request:
+        branches: [master, dev, feat/*]
+
+jobs:
+    test:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v2
+
+            - name: Install Rust
+              uses: actions-rs/toolchain@v1
+              with:
+                  toolchain: stable
+
+            - name: Build and test
+              run: |
+                  cargo build --verbose
+                  cargo test --verbose
