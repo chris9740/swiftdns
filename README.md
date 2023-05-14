@@ -2,6 +2,8 @@
 
 SwiftDNS is a simple, privacy-focused DNS client, written for Debian distributions in Rust.
 
+[![Rust Tests](../../actions/workflows/test.yml/badge.svg)](../../actions/workflows/test.yml/badge.svg)
+
 ## Project
 
 The SwiftDNS client can currently resolve A and AAAA records (more will be supported later).
