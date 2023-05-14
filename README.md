@@ -18,45 +18,38 @@ To install SwiftDNS, download the [latest release](https://github.com/chris9740/
 
 ## Features
 
-### Blacklisting
+[Blacklisting](#blacklisting) - Queries for domains that you have blacklisted will be refused by the client on your machine, and the query itself will never see the light of day. This can be useful for blocking unwanted sites, such as websites with poor privacy practices (e.g. Facebook, Tiktok) or adult websites.
 
-You can blacklist certain domains that you don't want to be resolved. Blacklisted domains will resolve with `REFUSED` (Return Code 5).
+## Blacklisting
 
-There are a few ways to blacklist a domain. All rules have to be specified in `.txt` files inside `/etc/swiftdns/rules/`. You can have as many files as you want, and you can add as many rules inside each file as you please.
+There are a few ways to blacklist a domain. All rules have to be specified in `.txt` files inside `/etc/swiftdns/rules/`. You can have as many files as you want, and each file can contain an unlimited amount of rules.
 
-Here are a few examples:
+### Basic Syntax
 
-[wordpress.txt]
+A DNS blacklist rule is a simple text string that specifies the domain or subdomain to block. For example, to block the domains `example.com` and `ads.invasive.web`, you can create rules with the following syntax:
 
-```sh
-# This is a comment inside our wordpress.txt file.
-# We want to block access to `wordpress.com` and `stats.wordpress.com`,
-# but still allow access to other subdomains, i.e. `public-api.wordpress.com` and the like.
-# Note that this does not block `www.wordpress.com`.
-
-wordpress.com
-stats.wordpress.com
+```
+example.com
+ads.invasive.web
 ```
 
-[facebook.txt]
+### Wildcard Patterns
 
-```sh
-# Inside this file, we want to blacklist `facebook.com` and every single one of it's subdomains.
-# This is referred to as wildcard matching.
+You can also use wildcard patterns to create more general rules that apply to multiple subdomains. For example, to block all subdomains of `example.com`, you can use the `*` wildcard pattern:
 
-facebook.com
-*.facebook.com
+```
+*.example.com
 ```
 
-[tiktok.txt]
+This rule will block requests for any subdomain of `example.com`, such as `mail.example.com`, `blog.example.com` and `james.blog.example.com`, but not `example.com` itself.
 
-```sh
-# We can use wildcard matching within the domain name as well.
-# Tiktok, for example, also has domains like `tiktokv.com`.
-# The following rule will block `tiktok.com`, `tiktokv.com`, and also other domains like `tiktokcdn.com`.
+If you want to block all subdomains, including the root domain, you can use the `**` wildcard pattern:
 
-tiktok*.com
 ```
+**.example.com
+```
+
+This rule will block any request for `example.com` as well as all subdomains of `example.com`.
 
 **Tip** - Test your rules with `swiftdns resolve example.com`. If done correctly, trying to resolve a blacklisted domain should give you an error.
 
