@@ -108,7 +108,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let domain = Domain::from(question.domain_name.to_string().as_str());
 
                 let q_type = question.q_type.to_string();
-                let record_type: RecordType = q_type.parse().unwrap();
+                let record_type: RecordType = q_type.parse().unwrap_or(RecordType::A);
 
                 if let Some(_) = filter::blacklist::find(&domain.name) {
                     let mut flags = query.flags.clone();
