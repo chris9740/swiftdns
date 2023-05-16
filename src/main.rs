@@ -9,7 +9,7 @@ use env_logger::Builder;
 use log::LevelFilter;
 use reqwest;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_description, crate_version, Arg, Command};
 use serde::Deserialize;
 
 mod cache;
@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let matches = Command::new("swiftdns")
         .version(crate_version!())
         .arg_required_else_help(true)
-        .about("A DNS client with blacklisting that resolves from Cloudflare DOH")
+        .about(crate_description!())
         .subcommand(
             Command::new("start").about("Start the DNS listener").arg(
                 Arg::new("address")
