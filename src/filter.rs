@@ -5,76 +5,87 @@ pub mod blacklist {
     use wildmatch::WildMatch;
 
     use crate::config;
+    use crate::domain::Domain;
 
     pub struct BlacklistEntry {
-        pub file: String,
         pub pattern: String,
+        pub path: String,
         pub line: usize,
+    }
+
+    impl BlacklistEntry {
+        pub fn format_message(&self, domain: &Domain) -> String {
+            format!(
+                "the domain `{}` has been blacklisted (pattern `{}`, {}:{}), refusing to resolve.",
+                domain.name, self.pattern, self.path, self.line
+            )
+        }
     }
 
     pub fn find(name: &str) -> Option<BlacklistEntry> {
         let rules_path = config::get_path().join("rules");
 
-        match fs::read_dir(&rules_path) {
-            Ok(dir) => {
-                for dir_entry in dir {
-                    let dir_entry = dir_entry.expect("Should always be Ok");
-                    let path = dir_entry.path();
+        if let Ok(dir) = fs::read_dir(rules_path) {
+            for dir_entry in dir {
+                let path = dir_entry.unwrap().path();
 
-                    if !path.is_file() {
-                        continue;
-                    }
-
-                    let full_path = path.to_string_lossy().to_string();
-
-                    if !full_path.ends_with(".txt") {
-                        continue;
-                    }
-
-                    let f = File::open(&full_path).unwrap();
-                    let reader = BufReader::new(f);
-
-                    for (index, entry) in reader.lines().enumerate() {
-                        let line = entry.unwrap();
-
-                        if line.starts_with("#") || line.trim().len() == 0 {
-                            continue;
-                        }
-
-                        // This is a globstar pattern, a shorthand for blacklisting a domain and all it's subdomains.
-                        //
-                        // Example:
-                        // The rule `**.example.com` will be "unwrapped" to two distinct rules:
-                        // `example.com and *.example.com`
-                        if line.starts_with("**.") {
-                            let domain_pattern = &line[3..];
-                            let subdomain_pattern = format!("*.{}", domain_pattern);
-
-                            if WildMatch::new(domain_pattern).matches(name)
-                                || WildMatch::new(&subdomain_pattern).matches(name)
-                            {
-                                return Some(BlacklistEntry {
-                                    file: full_path,
-                                    pattern: line.to_string(),
-                                    line: index + 1,
-                                });
-                            }
-                        }
-
-                        if WildMatch::new(&line).matches(name) {
-                            return Some(BlacklistEntry {
-                                file: full_path,
-                                pattern: line.to_string(),
-                                line: index + 1,
-                            });
-                        }
-                    }
+                if !path.is_file() {
+                    continue;
                 }
 
-                None
+                let full_path = path.to_string_lossy().to_string();
+
+                if !full_path.ends_with(".txt") {
+                    continue;
+                }
+
+                let file = File::open(&full_path).unwrap();
+                let reader = BufReader::new(file);
+
+                for (index, entry) in reader.lines().enumerate() {
+                    let pattern = entry.unwrap();
+
+                    if self::matches(&pattern, name) {
+                        let line = index + 1;
+
+                        return Some(BlacklistEntry {
+                            pattern: pattern,
+                            path: full_path.clone(),
+                            line: line,
+                        });
+                    }
+                }
             }
-            Err(_) => None,
         }
+
+        None
+    }
+
+    pub fn matches(pattern: &str, name: &str) -> bool {
+        /*
+         * This is a globstar pattern, a shorthand for blacklisting a domain and all it's subdomains.
+         *
+         * Example:
+         *
+         * The rule "**.example.com" will be unpacked to two distinct rules:
+         * "example.com" and "*.example.com"
+         */
+        if pattern.starts_with("**.") {
+            let domain_pattern = &pattern[3..];
+            let subdomain_pattern = format!("*.{}", domain_pattern);
+
+            if WildMatch::new(domain_pattern).matches(name)
+                || WildMatch::new(&subdomain_pattern).matches(name)
+            {
+                return true;
+            }
+        }
+
+        if WildMatch::new(&pattern).matches(name) {
+            return true;
+        }
+
+        false
     }
 }
 
@@ -90,6 +101,16 @@ mod tests {
         assert!(blacklist::find("tiktokv.com").is_some());
         assert!(blacklist::find("facebook.com").is_some());
         assert!(blacklist::find("doubleclick.net").is_some());
+    }
+
+    #[test]
+    fn matches_pattern() {
+        assert!(blacklist::matches("examp*.com", "example.com"));
+        assert!(blacklist::matches("examp*.com", "examp.com"));
+        assert!(blacklist::matches("**.examp*.com", "hi.example.com"));
+        assert!(blacklist::matches("**.examp*.com", "example.com"));
+
+        assert!(!blacklist::matches("*.example.com", "example.com"));
     }
 
     #[test]
