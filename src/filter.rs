@@ -61,7 +61,7 @@ pub mod blacklist {
         None
     }
 
-    fn matches(pattern: &str, name: &str) -> bool {
+    pub fn matches(pattern: &str, name: &str) -> bool {
         /*
          * This is a globstar pattern, a shorthand for blacklisting a domain and all it's subdomains.
          *
@@ -101,6 +101,16 @@ mod tests {
         assert!(blacklist::find("tiktokv.com").is_some());
         assert!(blacklist::find("facebook.com").is_some());
         assert!(blacklist::find("doubleclick.net").is_some());
+    }
+
+    #[test]
+    fn matches_pattern() {
+        assert!(blacklist::matches("examp*.com", "example.com"));
+        assert!(blacklist::matches("examp*.com", "examp.com"));
+        assert!(blacklist::matches("**.examp*.com", "hi.example.com"));
+        assert!(blacklist::matches("**.examp*.com", "example.com"));
+
+        assert!(!blacklist::matches("*.example.com", "example.com"));
     }
 
     #[test]
