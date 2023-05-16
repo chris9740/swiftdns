@@ -161,7 +161,7 @@ pub async fn resolve(
     let resolver_ip = config.mode.ip_address();
 
     let url = format!(
-        "https://{}/dns-query?name={}&type={}",
+        "https://{}/dns-query?name={}&type={}&do=1",
         resolver_ip,
         urlencoding::encode(&name),
         &record_type.to_string()
