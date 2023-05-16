@@ -35,10 +35,10 @@ pub async fn start(addr: &SocketAddr, client: reqwest::Client) {
         let q_type = question.q_type.to_string();
         let record_type: RecordType = q_type.parse().unwrap_or(RecordType::A);
 
-        if let Some(_) = filter::blacklist::find(&domain.name) {
+        if let Some(entry) = filter::blacklist::find(&domain.name) {
             let mut flags = query.flags.clone();
 
-            info!("`{}` has been blacklisted, refusing", &domain.name);
+            info!("{}", entry.format_message(&domain));
 
             flags.rcode = RCode::Refused;
 

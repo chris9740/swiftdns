@@ -90,14 +90,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let domain = resolve_match.get_one::<Domain>("name").unwrap();
             let record_type = resolve_match.get_one::<RecordType>("type").unwrap();
 
-            if let Some(blacklisted) = filter::blacklist::find(&domain.name) {
-                info!(
-                    "the domain `{}` has been blacklisted (pattern `{}`, {}:{}), refusing to resolve.",
-                    domain.name,
-                    blacklisted.pattern,
-                    blacklisted.file,
-                    blacklisted.line
-                );
+            if let Some(entry) = filter::blacklist::find(&domain.name) {
+                info!("{}", entry.format_message(domain));
 
                 return Ok(());
             }

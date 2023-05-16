@@ -5,11 +5,21 @@ pub mod blacklist {
     use wildmatch::WildMatch;
 
     use crate::config;
+    use crate::domain::Domain;
 
     pub struct BlacklistEntry {
         pub file: String,
         pub pattern: String,
         pub line: usize,
+    }
+
+    impl BlacklistEntry {
+        pub fn format_message(&self, domain: &Domain) -> String {
+            format!(
+                "the domain `{}` has been blacklisted (pattern `{}`, {}:{}), refusing to resolve.",
+                domain.name, self.pattern, self.file, self.line
+            )
+        }
     }
 
     pub fn find(name: &str) -> Option<BlacklistEntry> {
