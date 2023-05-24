@@ -1,0 +1,2 @@
+# This is a fixed file containing rules for whitelisting.
+# Domains in here take precendence over blacklisted domains.

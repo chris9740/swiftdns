@@ -46,5 +46,13 @@ assets = [
         "/etc/systemd/system/swiftdns.service.d/capabilities.conf",
         "644",
     ],
+    [
+        "assets/whitelist.txt",
+        "/etc/swiftdns/rules/whitelist.txt",
+        "644",
+    ],
 ]
-conf-files = ["/etc/swiftdns/conf.d/default-config.toml"]
+conf-files = [
+    "/etc/swiftdns/conf.d/default-config.toml",
+    "/etc/swiftdns/rules/whitelist.txt",
+]

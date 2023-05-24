@@ -20,6 +20,8 @@ To install SwiftDNS, download the [latest release](https://github.com/chris9740/
 
 [Blacklisting](#blacklisting) - Queries for domains that you have blacklisted will be refused by the client on your machine, and the query itself will never see the light of day. This can be useful for blocking unwanted sites, such as websites with poor privacy practices (e.g. Facebook, Tiktok) or adult websites.
 
+[Whitelisting](#whitelisting) - Exempt certain domains from being caught by the blacklist. Useful if you want to block `googleapis.com` and all it's subdomains, except for `discord-attachments-uploads-prd.storage.googleapis.com`.
+
 ## Blacklisting
 
 There are a few ways to blacklist a domain. All rules have to be specified in `.txt` files inside `/etc/swiftdns/rules/`. You can have as many files as you want, and each file can contain an unlimited amount of rules.
@@ -52,6 +54,10 @@ If you want to block all subdomains, including the root domain, you can use the 
 This rule will block any request for `example.com` as well as all subdomains of `example.com`. Note that, unlike `*.`, the `**.` pattern can only exist at the beginning of the line.
 
 **Tip** - Test your rules with `swiftdns resolve example.com`. If done correctly, trying to resolve a blacklisted domain should give you an error.
+
+## Whitelisting
+
+The syntax for whitelisting is identical to that of blacklisting. The only difference is that they _have_ to be located in the already-created file `/etc/swiftdns/rules/whitelist.txt`. The whitelist takes precedence over any blacklist file.
 
 ## Configuration
 
