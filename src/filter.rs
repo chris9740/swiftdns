@@ -1,75 +1,111 @@
-pub mod blacklist {
-    use std::fs;
-    use std::fs::File;
-    use std::io::{prelude::*, BufReader};
-    use wildmatch::WildMatch;
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    path::PathBuf,
+};
+
+use wildmatch::WildMatch;
+
+use crate::domain::Domain;
+
+pub mod whitelist {
 
     use crate::config;
-    use crate::domain::Domain;
 
-    pub struct BlacklistEntry {
-        pub pattern: String,
-        pub path: String,
-        pub line: usize,
-    }
+    use super::FilterEntry;
 
-    impl BlacklistEntry {
-        pub fn format_message(&self, domain: &Domain) -> String {
-            format!(
-                "the domain `{}` has been blacklisted (pattern `{}`, {}:{}), refusing to resolve.",
-                domain.name, self.pattern, self.path, self.line
-            )
+    pub fn find(name: &str) -> Option<FilterEntry> {
+        let whitelist_path = config::get_path().join("rules/whitelist.txt");
+        let exists = whitelist_path.try_exists().unwrap();
+
+        if !exists {
+            return None;
         }
+
+        super::enumerate(&whitelist_path, name)
     }
+}
 
-    pub fn find(name: &str) -> Option<BlacklistEntry> {
-        let rules_path = config::get_path().join("rules");
+pub struct FilterEntry {
+    pub file: String,
+    pub pattern: String,
+    pub line: usize,
+}
 
-        if let Ok(dir) = fs::read_dir(rules_path) {
-            for dir_entry in dir {
-                let path = dir_entry.unwrap().path();
+impl FilterEntry {
+    pub fn format_message(&self, domain: &Domain) -> String {
+        format!(
+            "the domain `{}` has been blacklisted (pattern `{}`, {}:{}), refusing to resolve.",
+            domain.name, self.pattern, self.file, self.line
+        )
+    }
+}
 
-                if !path.is_file() {
-                    continue;
-                }
+pub mod blacklist {
+    use std::fs;
 
-                let full_path = path.to_string_lossy().to_string();
+    use crate::config;
 
-                if !full_path.ends_with(".txt") {
-                    continue;
-                }
+    use super::FilterEntry;
 
-                let file = File::open(&full_path).unwrap();
-                let reader = BufReader::new(file);
+    pub fn find(name: &str) -> Option<FilterEntry> {
+        if super::whitelist::find(name).is_some() {
+            return None;
+        }
 
-                for (index, entry) in reader.lines().enumerate() {
-                    let pattern = entry.unwrap();
+        let blacklists_dir = config::get_path().join("rules");
 
-                    if self::matches(&pattern, name) {
-                        let line = index + 1;
+        match fs::read_dir(&blacklists_dir) {
+            Ok(dir) => {
+                for dir_entry in dir {
+                    let dir_entry = dir_entry.expect("Should always be Ok");
+                    let path = dir_entry.path();
 
-                        return Some(BlacklistEntry {
-                            pattern: pattern,
-                            path: full_path.clone(),
-                            line: line,
-                        });
+                    if !path.is_file() {
+                        continue;
+                    }
+
+                    let full_path = path.to_string_lossy().to_string();
+
+                    if !full_path.ends_with(".txt") {
+                        continue;
+                    }
+
+                    let result = super::enumerate(&path, name);
+
+                    if result.is_some() {
+                        return result;
                     }
                 }
+
+                None
             }
+            Err(_) => None,
+        }
+    }
+}
+
+/// Enumerates the file and matches patterns against the domain name
+fn enumerate(path: &PathBuf, name: &str) -> Option<FilterEntry> {
+    let file = File::open(&path).unwrap();
+    let reader = BufReader::new(file);
+
+    for (index, entry) in reader.lines().enumerate() {
+        let line = entry.unwrap();
+        let pattern = line.trim();
+
+        if pattern.starts_with("#") || pattern.len() == 0 {
+            continue;
         }
 
-        None
-    }
+        let filename = path.to_string_lossy().to_string();
 
-    pub fn matches(pattern: &str, name: &str) -> bool {
-        /*
-         * This is a globstar pattern, a shorthand for blacklisting a domain and all it's subdomains.
-         *
-         * Example:
-         *
-         * The rule "**.example.com" will be unpacked to two distinct rules:
-         * "example.com" and "*.example.com"
-         */
+        let line_number = index + 1;
+
+        // This is a globstar pattern, a shorthand for blacklisting a domain and all it's subdomains.
+        //
+        // The pattern `**.example.com` will be "unwrapped" to two distinct patterns:
+        // `example.com` and `*.example.com`
         if pattern.starts_with("**.") {
             let domain_pattern = &pattern[3..];
             let subdomain_pattern = format!("*.{}", domain_pattern);
@@ -77,16 +113,24 @@ pub mod blacklist {
             if WildMatch::new(domain_pattern).matches(name)
                 || WildMatch::new(&subdomain_pattern).matches(name)
             {
-                return true;
+                return Some(FilterEntry {
+                    file: filename,
+                    pattern: pattern.to_string(),
+                    line: line_number,
+                });
             }
         }
 
         if WildMatch::new(&pattern).matches(name) {
-            return true;
+            return Some(FilterEntry {
+                file: filename,
+                pattern: pattern.to_string(),
+                line: line_number,
+            });
         }
-
-        false
     }
+
+    None
 }
 
 #[cfg(test)]
@@ -101,16 +145,6 @@ mod tests {
         assert!(blacklist::find("tiktokv.com").is_some());
         assert!(blacklist::find("facebook.com").is_some());
         assert!(blacklist::find("doubleclick.net").is_some());
-    }
-
-    #[test]
-    fn matches_pattern() {
-        assert!(blacklist::matches("examp*.com", "example.com"));
-        assert!(blacklist::matches("examp*.com", "examp.com"));
-        assert!(blacklist::matches("**.examp*.com", "hi.example.com"));
-        assert!(blacklist::matches("**.examp*.com", "example.com"));
-
-        assert!(!blacklist::matches("*.example.com", "example.com"));
     }
 
     #[test]
