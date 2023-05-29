@@ -44,7 +44,7 @@ pub async fn start(addr: &SocketAddr, client: reqwest::Client) {
 
             let dns = Dns {
                 id: query.id,
-                flags: flags,
+                flags,
                 questions: query.questions,
                 additionals: Vec::new(),
                 answers: Vec::new(),
@@ -123,7 +123,7 @@ pub async fn start(addr: &SocketAddr, client: reqwest::Client) {
 
             let dns = Dns {
                 id: query.id,
-                flags: flags,
+                flags,
                 questions: query.questions,
                 additionals: Vec::new(),
                 answers: Vec::new(),

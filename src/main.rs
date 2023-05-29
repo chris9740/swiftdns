@@ -7,7 +7,6 @@ use dns::RecordType;
 use domain::Domain;
 use env_logger::Builder;
 use log::LevelFilter;
-use reqwest;
 
 use clap::{crate_description, crate_version, Arg, Command};
 use serde::Deserialize;
@@ -73,12 +72,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let addr = {
                 if let Some(specified_addr) = start_match.get_one::<SocketAddr>("address") {
                     specified_addr
+                } else if cfg!(debug_assertions) {
+                    &debug_addr
                 } else {
-                    if cfg!(debug_assertions) {
-                        &debug_addr
-                    } else {
-                        &release_addr
-                    }
+                    &release_addr
                 }
             };
 
@@ -94,7 +91,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 return Ok(());
             }
 
-            let response = dns::resolve(&reqw_client, &domain.name, &record_type).await.unwrap();
+            let response = dns::resolve(&reqw_client, &domain.name, record_type).await.unwrap();
 
             if let Some(answer) = response.answer {
                 let record = answer.last().expect("Answer should have at least 1 entry");
@@ -116,5 +113,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
         _ => panic!("Something went wrong. A subcommand was provided and accepted by clap but not caught by match"),
     };
 
-    return Ok(());
+    Ok(())
 }

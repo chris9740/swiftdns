@@ -35,8 +35,8 @@ impl Cache {
         let valid_until = Utc::now() + Duration::seconds(ttl_seconds.into());
 
         let entry = CacheEntry {
-            response: response,
-            valid_until: valid_until,
+            response,
+            valid_until,
         };
 
         self.hash_map.insert(question, entry);
