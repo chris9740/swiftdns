@@ -29,8 +29,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     Builder::new().filter_level(log_level).init();
 
-    config::get_config().expect("Config should be valid");
-
+    let conf = config::get_config().expect("Config should be valid");
     let reqw_client = reqwest::Client::new();
 
     let matches = Command::new("swiftdns")
@@ -68,7 +67,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     match matches.subcommand() {
         Some(("start", start_match)) => {
-            let conf = config::get_config().unwrap();
             let debug_addr = "127.0.0.1:5053".parse::<SocketAddr>().unwrap();
             let release_addr = conf.address;
 
