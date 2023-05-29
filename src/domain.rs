@@ -6,7 +6,7 @@
 //
 // https://en.wikipedia.org/wiki/Fully_qualified_domain_name
 fn parse(name: &str) -> &str {
-    if !name.ends_with(".") {
+    if !name.ends_with('.') {
         return name;
     }
 
@@ -26,7 +26,9 @@ impl From<&str> for Domain {
     fn from(value: &str) -> Self {
         let name = parse(value);
 
-        Domain { name: name.to_string() }
+        Domain {
+            name: name.to_string(),
+        }
     }
 }
 

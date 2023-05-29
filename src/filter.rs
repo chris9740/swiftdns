@@ -59,7 +59,7 @@ pub mod blacklist {
         let directory_path = config::config_location().join("rules");
         let directory_read = fs::read_dir(&directory_path);
 
-        if !directory_read.is_ok() {
+        if directory_read.is_err() {
             return None;
         }
 
@@ -81,11 +81,7 @@ pub mod blacklist {
 
                 true
             })
-            .map(|object| {
-                let path = object.unwrap().path();
-
-                return path;
-            })
+            .map(|object| object.unwrap().path())
             .collect();
 
         for path in files {
@@ -102,14 +98,14 @@ pub mod blacklist {
 
 /// Enumerates the file and matches patterns against the domain name
 fn enumerate(path: &PathBuf, name: &str) -> Option<FilterEntry> {
-    let file = File::open(&path).unwrap();
+    let file = File::open(path).unwrap();
     let reader = BufReader::new(file);
 
     for (index, entry) in reader.lines().enumerate() {
         let line = entry.unwrap();
         let pattern = line.trim();
 
-        if pattern.starts_with("#") || pattern.len() == 0 {
+        if pattern.starts_with('#') || pattern.is_empty() {
             continue;
         }
 
@@ -122,7 +118,7 @@ fn enumerate(path: &PathBuf, name: &str) -> Option<FilterEntry> {
         // The pattern `**.example.com` will be "unwrapped" to two distinct patterns:
         // `example.com` and `*.example.com`
         if pattern.starts_with("**.") {
-            let domain_pattern = &pattern[3..];
+            let domain_pattern = pattern.strip_prefix("**.").unwrap();
             let subdomain_pattern = format!("*.{}", domain_pattern);
 
             if WildMatch::new(domain_pattern).matches(name)
@@ -136,7 +132,7 @@ fn enumerate(path: &PathBuf, name: &str) -> Option<FilterEntry> {
             }
         }
 
-        if WildMatch::new(&pattern).matches(name) {
+        if WildMatch::new(pattern).matches(name) {
             return Some(FilterEntry {
                 file: filename,
                 pattern: pattern.to_string(),

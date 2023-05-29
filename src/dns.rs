@@ -14,6 +14,7 @@ use strum::{EnumIter, IntoEnumIterator};
 use crate::config;
 
 #[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum RecordType {
     A,
     AAAA,
@@ -149,7 +150,7 @@ pub fn encode(query: Dns) -> Result<bytes::BytesMut, ()> {
     })
     .unwrap();
 
-    return Ok(dns);
+    Ok(dns)
 }
 
 pub async fn resolve(
@@ -163,7 +164,7 @@ pub async fn resolve(
     let url = format!(
         "https://{}/dns-query?name={}&type={}&do=1",
         resolver_ip,
-        urlencoding::encode(&name),
+        urlencoding::encode(name),
         &record_type.to_string()
     );
 
