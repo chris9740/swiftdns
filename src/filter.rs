@@ -42,7 +42,10 @@ impl FilterEntry {
 }
 
 pub mod blacklist {
-    use std::fs;
+    use std::{
+        fs::{self},
+        path::PathBuf,
+    };
 
     use crate::config;
 
@@ -53,35 +56,47 @@ pub mod blacklist {
             return None;
         }
 
-        let blacklists_dir = config::get_path().join("rules");
+        let directory_path = config::get_path().join("rules");
+        let directory_read = fs::read_dir(&directory_path);
 
-        match fs::read_dir(&blacklists_dir) {
-            Ok(dir) => {
-                for dir_entry in dir {
-                    let dir_entry = dir_entry.expect("Should always be Ok");
-                    let path = dir_entry.path();
+        if !directory_read.is_ok() {
+            return None;
+        }
 
-                    if !path.is_file() {
-                        continue;
-                    }
+        let directory = directory_read.unwrap();
 
-                    let full_path = path.to_string_lossy().to_string();
+        let files: Vec<PathBuf> = directory
+            .filter(|object| {
+                let file = object.as_ref().expect("Should always be Ok");
+                let path = file.path();
+                let path_name = path.to_string_lossy().to_string();
 
-                    if !full_path.ends_with(".txt") {
-                        continue;
-                    }
-
-                    let result = super::enumerate(&path, name);
-
-                    if result.is_some() {
-                        return result;
-                    }
+                if !path.is_file() {
+                    return false;
                 }
 
-                None
+                if path_name == "whitelist.txt" || !path_name.ends_with(".txt") {
+                    return false;
+                }
+
+                true
+            })
+            .map(|object| {
+                let path = object.unwrap().path();
+
+                return path;
+            })
+            .collect();
+
+        for path in files {
+            let result = super::enumerate(&path, name);
+
+            if result.is_some() {
+                return result;
             }
-            Err(_) => None,
         }
+
+        None
     }
 }
 
