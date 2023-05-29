@@ -55,13 +55,13 @@ impl std::default::Default for SwiftConfig {
 }
 
 pub fn get_config() -> Result<SwiftConfig, Box<dyn Error>> {
-    let config_path = get_path().join("conf.d");
+    let config_path = config_location().join("conf.d");
     let config: SwiftConfig = confy::load(&config_path.to_string_lossy(), None)?;
 
     Ok(config)
 }
 
-pub fn get_path() -> PathBuf {
+pub fn config_location() -> PathBuf {
     if cfg!(debug_assertions) {
         env::current_dir().unwrap()
     } else {
