@@ -94,7 +94,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let response = dns::resolve(&reqw_client, &domain.name, record_type).await.unwrap();
 
             if let Some(answer) = response.answer {
-                let record = answer.last().expect("Answer should have at least 1 entry");
+                let record = answer.first().expect("Answer should have at least 1 entry");
 
                 info!(
                     "the `{}` record for `{}` was resolved to {}",
