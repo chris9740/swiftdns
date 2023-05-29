@@ -15,7 +15,7 @@ pub mod whitelist {
     use super::FilterEntry;
 
     pub fn find(name: &str) -> Option<FilterEntry> {
-        let whitelist_path = config::get_path().join("rules/whitelist.txt");
+        let whitelist_path = config::config_location().join("rules/whitelist.txt");
         let exists = whitelist_path.try_exists().unwrap();
 
         if !exists {
@@ -56,7 +56,7 @@ pub mod blacklist {
             return None;
         }
 
-        let directory_path = config::get_path().join("rules");
+        let directory_path = config::config_location().join("rules");
         let directory_read = fs::read_dir(&directory_path);
 
         if !directory_read.is_ok() {
