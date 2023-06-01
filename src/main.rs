@@ -29,7 +29,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
     Builder::new().filter_level(log_level).init();
 
     let conf = config::get_config().expect("Config should be valid");
-    let reqw_client = reqwest::Client::new();
+
+    let reqw_client = if conf.tor {
+        let proxy = reqwest::Proxy::all("socks5h://127.0.0.1:9050")
+            .expect("Could not find tor proxy at 127.0.0.1:9050");
+
+        let client = reqwest::Client::builder()
+            .proxy(proxy)
+            .build()
+            .expect("Should be able to build client");
+
+        let res = client.get("https://check.torproject.org").send().await?;
+
+        let text = res.text().await?;
+        let is_tor = text.contains("Congratulations. This browser is configured to use Tor.");
+
+        assert!(is_tor, "did not successfully connect to tor");
+
+        client
+    } else {
+        reqwest::Client::new()
+    };
 
     let matches = Command::new("swiftdns")
         .version(crate_version!())

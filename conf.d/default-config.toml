@@ -7,3 +7,6 @@ mode = "Standard"
 
 # The socket address to bind the listener to
 address = "127.0.0.53:53"
+
+# Whether to route DNS queries through tor
+tor = false
