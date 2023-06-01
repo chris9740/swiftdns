@@ -22,6 +22,8 @@ To install SwiftDNS, download the [latest release](https://github.com/chris9740/
 
 [Whitelisting](#whitelisting) - Exempt certain domains from being caught by the blacklist. Useful if you want to block `googleapis.com` and all it's subdomains, except for `discord-attachments-uploads-prd.storage.googleapis.com`.
 
+[Tor Proxy](#tor) - Route all DNS queries through Tor for the utmost privacy.
+
 ## Blacklisting
 
 There are a few ways to blacklist a domain. All rules have to be specified in `.txt` files inside `/etc/swiftdns/rules/`. You can have as many files as you want, and each file can contain an unlimited amount of rules.
@@ -59,16 +61,21 @@ This rule will block any request for `example.com` as well as all subdomains of 
 
 The syntax for whitelisting is identical to that of blacklisting. The only difference is that they _have_ to be located in the already-created file `/etc/swiftdns/rules/whitelist.txt`. The whitelist takes precedence over any blacklist file.
 
+## Tor
+
+To achieve the most privacy possible, you can route your traffic through Tor. See [configuration](#configuration) (note that this will drastically increase the time it takes to query).
+
 ## Configuration
 
 You can configure SwiftDNS to behave to your liking. To change a setting, simply open `/etc/swiftdns/conf.d/default-config.toml` in a text editor (note that this requires root privileges). After saving your configuration file, run `systemctl restart swiftdns` to clear the cache.
 
 The different configuration options have more elaborate documentation within the config file.
 
-| Key     | Default         | Value(s)                           | Description                             |
-| ------- | --------------- | ---------------------------------- | --------------------------------------- |
-| mode    | `Standard`      | One of `Standard`, `Safe`, `Clean` | Configure which mode to run SwiftDNS in |
-| address | `127.0.0.53:53` | A socket address (with port)       | The address to bind the listener to     |
+| Key     | Default         | Value(s)                           | Description                              |
+| ------- | --------------- | ---------------------------------- | ---------------------------------------- |
+| mode    | `Standard`      | One of `Standard`, `Safe`, `Clean` | Configure which mode to run SwiftDNS in  |
+| address | `127.0.0.53:53` | A socket address (with port)       | The address to bind the listener to      |
+| tor     | `false`         | bool                               | Whether to route DNS queries through tor |
 
 ## Commands
 

@@ -43,6 +43,7 @@ impl From<&str> for Mode {
 pub struct SwiftConfig {
     pub mode: Mode,
     pub address: SocketAddr,
+    pub tor: bool,
 }
 
 impl std::default::Default for SwiftConfig {
@@ -50,6 +51,7 @@ impl std::default::Default for SwiftConfig {
         Self {
             mode: Mode::Standard,
             address: "127.0.0.53:53".parse().unwrap(),
+            tor: false,
         }
     }
 }
