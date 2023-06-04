@@ -9,7 +9,12 @@ license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version = "0.11", features = ["blocking", "json", "socks"] }
+reqwest = { version = "0.11", default-features = false, features = [
+    "blocking",
+    "json",
+    "socks",
+    "rustls-tls",
+] }
 serde = { version = "1.0.159", features = ["derive"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 clap = { version = "4.0", features = ["derive", "cargo"] }
