@@ -3,7 +3,8 @@ extern crate log;
 
 use std::{error::Error, net::SocketAddr};
 
-use dns::RecordType;
+use config::get_config;
+use dns::resolver::RecordType;
 use domain::Domain;
 use env_logger::Builder;
 use log::LevelFilter;
@@ -12,11 +13,12 @@ use clap::{crate_description, crate_version, Arg, Command};
 use serde::Deserialize;
 
 mod cache;
-mod client;
 mod config;
 mod dns;
 mod domain;
 mod filter;
+mod http;
+mod listener;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -28,33 +30,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     Builder::new().filter_level(log_level).init();
 
-    let conf = config::get_config().expect("Config should be valid");
-
-    let reqw_client = if conf.tor {
-        let proxy = reqwest::Proxy::all("socks5h://127.0.0.1:9050")
-            .expect("Could not find tor proxy at 127.0.0.1:9050");
-
-        let client = reqwest::Client::builder()
-            .proxy(proxy)
-            .build()
-            .expect("Should be able to build client");
-
-        let res = client.get("https://check.torproject.org").send().await?;
-
-        let text = res.text().await?;
-        let is_tor = text.contains("Congratulations. This browser is configured to use Tor.");
-
-        assert!(is_tor, "did not successfully connect to tor");
-
-        client
-    } else {
-        reqwest::Client::new()
-    };
-
     let matches = Command::new("swiftdns")
         .version(crate_version!())
-        .arg_required_else_help(true)
         .about(crate_description!())
+        .arg_required_else_help(true)
         .subcommand(
             Command::new("start").about("Start the DNS listener").arg(
                 Arg::new("address")
@@ -84,10 +63,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )
         .get_matches();
 
+    let config = get_config().expect("Config should be valid");
+
     match matches.subcommand() {
         Some(("start", start_match)) => {
             let debug_addr = "127.0.0.1:5053".parse::<SocketAddr>().unwrap();
-            let release_addr = conf.address;
+            let release_addr = config.address;
 
             let addr = {
                 if let Some(specified_addr) = start_match.get_one::<SocketAddr>("address") {
@@ -99,11 +80,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             };
 
-            client::start(addr, reqw_client).await;
+            listener::start(addr, &config).await;
         },
         Some(("resolve", resolve_match)) => {
             let domain = resolve_match.get_one::<Domain>("name").unwrap();
             let record_type = resolve_match.get_one::<RecordType>("type").unwrap();
+
+            let mut http_client = http::client::Client::new(&config).expect("Should be able to build client wrapper");
 
             if let Some(entry) = filter::blacklist::find(&domain.name) {
                 info!("{}", entry.format_message(domain));
@@ -111,7 +94,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 return Ok(());
             }
 
-            let response = dns::resolve(&reqw_client, &domain.name, record_type).await.unwrap();
+            let response = dns::resolver::resolve(&mut http_client, &domain.name, record_type).await.unwrap();
 
             if let Some(answer) = response.answer {
                 let record = answer.first().expect("Answer should have at least 1 entry");

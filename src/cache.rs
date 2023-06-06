@@ -2,16 +2,16 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Duration, Utc};
 
-use crate::dns;
+use crate::dns::resolver::{DnsQuestion, DnsResponse};
 
 #[derive(Clone)]
 pub struct CacheEntry {
     pub valid_until: DateTime<Utc>,
-    pub response: dns::DnsResponse,
+    pub response: DnsResponse,
 }
 
 pub struct Cache {
-    hash_map: HashMap<dns::DnsQuestion, CacheEntry>,
+    hash_map: HashMap<DnsQuestion, CacheEntry>,
 }
 
 impl Cache {
@@ -21,7 +21,7 @@ impl Cache {
         Cache { hash_map }
     }
 
-    pub fn set(&mut self, question: dns::DnsQuestion, response: &dns::DnsResponse) {
+    pub fn set(&mut self, question: DnsQuestion, response: &DnsResponse) {
         let response = response.clone();
 
         // We will assume that the TTL for the first record will be the same for all records in this response.
@@ -42,7 +42,7 @@ impl Cache {
         self.hash_map.insert(question, entry);
     }
 
-    pub fn get(&mut self, question: &dns::DnsQuestion) -> Option<CacheEntry> {
+    pub fn get(&mut self, question: &DnsQuestion) -> Option<CacheEntry> {
         if let Some(entry) = self.hash_map.get(question) {
             if entry.valid_until < Utc::now() {
                 self.hash_map.remove(question);

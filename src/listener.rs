@@ -5,12 +5,19 @@ use dns_message_parser::{Dns, RCode};
 
 use crate::{
     cache::Cache,
-    dns::{self, RecordType},
+    config::SwiftConfig,
+    dns::{
+        self,
+        resolver::{DnsQuestion, RecordType},
+    },
     domain::Domain,
-    filter,
+    filter, http,
 };
 
-pub async fn start(addr: &SocketAddr, client: reqwest::Client) {
+pub async fn start(addr: &SocketAddr, config: &SwiftConfig) {
+    let mut client =
+        http::client::Client::new(config).expect("Should be able to build client wrapper");
+
     let mut cache = Cache::new();
 
     let socket = match UdpSocket::bind(addr) {
@@ -58,7 +65,7 @@ pub async fn start(addr: &SocketAddr, client: reqwest::Client) {
             continue;
         }
 
-        let question = dns::DnsQuestion {
+        let question = DnsQuestion {
             name: domain.name.clone(),
             r#type: record_type.value(),
         };
@@ -74,7 +81,7 @@ pub async fn start(addr: &SocketAddr, client: reqwest::Client) {
 
                 unwrapped.response.clone()
             } else {
-                dns::resolve(&client, &domain.name, &record_type)
+                dns::resolver::resolve(&mut client, &domain.name, &record_type)
                     .await
                     .unwrap()
             }
@@ -88,7 +95,7 @@ pub async fn start(addr: &SocketAddr, client: reqwest::Client) {
         }
 
         if let Some(answers) = response.answer {
-            query.answers = dns::format_answers(&answers);
+            query.answers = dns::group_answers(&answers);
 
             let encoding_result = dns::encode(query);
 

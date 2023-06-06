@@ -1,17 +1,7 @@
-use std::{
-    error::Error,
-    fmt::Display,
-    net::{Ipv4Addr, Ipv6Addr},
-    str::FromStr,
-};
-
-use dns_message_parser::{
-    rr::{self, RR},
-    DecodeError, Dns, DomainName, Flags,
-};
+use std::{error::Error, fmt::Display, str::FromStr};
 use strum::{EnumIter, IntoEnumIterator};
 
-use crate::config;
+use crate::{config, http};
 
 #[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq)]
 #[allow(clippy::upper_case_acronyms)]
@@ -101,60 +91,8 @@ pub struct DnsQuestion {
     pub r#type: u16,
 }
 
-pub fn decode(query_bytes: &[u8]) -> Result<Dns, DecodeError> {
-    let bytes = Vec::from(query_bytes);
-
-    Dns::decode(bytes.into())
-}
-
-pub fn format_answers(answers: &Vec<DnsAnswer>) -> Vec<RR> {
-    let mut group = Vec::new();
-
-    for answer in answers {
-        if answer.r#type == RecordType::A.value() {
-            group.push(RR::A(rr::A {
-                domain_name: answer.domain_name.parse::<DomainName>().unwrap(),
-                ttl: answer.ttl,
-                ipv4_addr: answer.data.parse::<Ipv4Addr>().unwrap(),
-            }));
-        } else if answer.r#type == RecordType::AAAA.value() {
-            group.push(RR::AAAA(rr::AAAA {
-                domain_name: answer.domain_name.parse::<DomainName>().unwrap(),
-                ttl: answer.ttl,
-                ipv6_addr: answer.data.parse::<Ipv6Addr>().unwrap(),
-            }));
-        }
-    }
-
-    group
-}
-
-pub fn encode(query: Dns) -> Result<bytes::BytesMut, ()> {
-    let dns = Dns::encode(&Dns {
-        id: query.id,
-        flags: Flags {
-            qr: true,
-            opcode: query.flags.opcode,
-            aa: true,
-            tc: query.flags.tc,
-            rd: query.flags.rd,
-            ra: true,
-            ad: true,
-            cd: query.flags.cd,
-            rcode: query.flags.rcode,
-        },
-        additionals: query.additionals,
-        authorities: query.authorities,
-        questions: query.questions,
-        answers: query.answers,
-    })
-    .unwrap();
-
-    Ok(dns)
-}
-
 pub async fn resolve(
-    client: &reqwest::Client,
+    client: &mut http::client::Client,
     name: &str,
     record_type: &RecordType,
 ) -> Result<DnsResponse, Box<dyn Error>> {
@@ -170,6 +108,7 @@ pub async fn resolve(
 
     let res = client
         .get(&url)
+        .await
         .header(reqwest::header::ACCEPT, "application/dns-json")
         .send()
         .await
