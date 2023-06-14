@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate log;
 
+
 use std::{error::Error, net::SocketAddr};
 
 use config::get_config;
@@ -63,7 +64,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )
         .get_matches();
 
-    let config = get_config().expect("Config should be valid");
+    let config = get_config().expect("Invalid configuration");
 
     match matches.subcommand() {
         Some(("start", start_match)) => {

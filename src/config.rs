@@ -57,15 +57,15 @@ impl std::default::Default for SwiftConfig {
 }
 
 pub fn get_config() -> Result<SwiftConfig, Box<dyn Error>> {
-    let config_path = config_location().join("conf.d");
-    let config: SwiftConfig = confy::load(&config_path.to_string_lossy(), None)?;
+    let config_path = config_location().join("config.toml");
+    let config: SwiftConfig = confy::load_path(config_path)?;
 
     Ok(config)
 }
 
 pub fn config_location() -> PathBuf {
     if cfg!(debug_assertions) {
-        env::current_dir().unwrap()
+        env::current_dir().unwrap().join("assets/")
     } else {
         Path::new("/etc/swiftdns/").to_path_buf()
     }

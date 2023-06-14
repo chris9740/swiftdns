@@ -1,79 +1,108 @@
-# SwiftDNS
+# Swiftdns
 
-SwiftDNS is a simple, privacy-focused DNS client, written for Debian distributions in Rust.
+Swiftdns is a privacy-focused DNS client for Linux.
 
 ## Project
 
-The SwiftDNS client can currently resolve A and AAAA records (more will be supported later).
+The Swiftdns client can currently resolve A and AAAA records (more will be supported later).
 
-In the background, it uses Cloudflare's DOH (DNS over HTTPS) API to resolve the domains.
+In the background, it uses Cloudflare's DOH (DNS over HTTPS) API to resolve the domains, and optionally routes through a tor proxy.
 
 ## Notice
 
-SwiftDNS works well with Firefox, but it throws a fit for a lot of domains in Chromium (`ERR_NAME_NOT_RESOLVED`, it often doesn't even try to query the DNS). Not sure why, feel free to file an issue or a pull request if you can figure it out.
+At this moment, Swiftdns should not be considered stable.
+
+Swiftdns works well with most software, but Chromium doesn't always query the client, it occasionally errors with `ERR_NAME_NOT_RESOLVED` for some reason.
+This can cause Chromium to erroneously fail to resolve a domain. However, it will never accidentally resolve a blacklisted domain, assuming your computer is properly configured to use Swiftdns.
 
 ## Installing
 
-To install SwiftDNS, download the [latest release](https://github.com/chris9740/swiftdns/releases/latest).
+### Prerequisites
+
+-   systemd
+
+To install Swiftdns, first head over to the [release page](https://github.com/chris9740/swiftdns/releases/latest).
+
+Download the `swiftdns` file and place it in `/usr/bin/swiftdns`, then download and extract `Source code.zip`.
+
+Open a command-line inside the root of the source directory and execute `./scripts/install.sh`. This will create the systemd files and create a configuration file if none exists.
 
 ## Features
 
-[Blacklisting](#blacklisting) - Queries for domains that you have blacklisted will be refused by the client on your machine, and the query itself will never see the light of day. This can be useful for blocking unwanted sites, such as websites with poor privacy practices (e.g. Facebook, Tiktok) or adult websites.
+[Blacklisting](#blacklisting) - Queries for domains that you have blacklisted will never get to leave your machine. Useful for blocking websites with poor privacy practices (e.g. Facebook, Tiktok) or adult websites.
 
-[Whitelisting](#whitelisting) - Exempt certain domains from being caught by the blacklist. Useful if you want to block `googleapis.com` and all it's subdomains, except for `discord-attachments-uploads-prd.storage.googleapis.com`.
+[Whitelisting](#whitelisting) - Exempt certain domains from being flagged by the blacklist. This can be used if you want to block e.g. `googleapis.com` and all it's subdomains except for `discord-attachments-uploads-prd.storage.googleapis.com`.
 
-[Tor Proxy](#tor) - Route all DNS queries through Tor for the utmost privacy.
+[Tor Proxy](#tor) - Route all DNS queries through Tor.
 
 ## Blacklisting
 
-There are a few ways to blacklist a domain. All rules have to be specified in `.txt` files inside `/etc/swiftdns/rules/`. You can have as many files as you want, and each file can contain an unlimited amount of rules.
+Swiftdns will look for our blacklist rules inside `.list` files located in the root of `/etc/swiftdns/filters/`.
 
-### Basic Syntax
+Knowing this, let's create a `google.list` file to make sure we never accidentally use `google.com` for searching, while still being able to visit subdomains such as `maps.google.com` and `translate.google.com`.
 
-A DNS blacklist rule is a simple text string that specifies the domain or subdomain to block. For example, to block the domains `example.com` and `ads.invasive.web`, you can create rules with the following syntax:
-
-```
-example.com
-ads.invasive.web
-```
-
-### Wildcard Patterns
-
-You can also use wildcard patterns to create more general rules that apply to multiple subdomains. For example, to block all subdomains of `example.com`, you can use the `*` wildcard pattern:
+Inside our newly created `/etc/swiftdns/filters/google.list` file, we will enter the following:
 
 ```
-*.example.com
+google.com
+www.google.com
 ```
 
-This rule will block requests for any subdomain of `example.com`, such as `mail.example.com`, `blog.example.com` and `james.blog.example.com`, but not `example.com` itself.
+Once we save the file, the rules will go into effect immediately.
 
-If you want to block all subdomains, including the root domain, you can use the `**` wildcard pattern:
+If we want to block _all_ subdomains of `google.com`, we can do that using the _globstar pattern_ (`**.`), like this:
 
 ```
-**.example.com
+**.google.com
 ```
 
-This rule will block any request for `example.com` as well as all subdomains of `example.com`. Note that, unlike `*.`, the `**.` pattern can only exist at the beginning of the line.
+This will block `google.com` and every single subdomain of `google.com`. Note that `**.` can only be specified at the very beginning of the line.
+
+In addition to globstar, we can also use simple wildcard matching:
+
+```
+*s.google.com
+```
+
+This will match any domain that ends in `s.google.com`, such as `books.google.com` and `services.google.com`.
+
+Let's make use of comments to describe our rules:
+
+```sh
+# Block any domain that has the word "analytics" anywhere in it
+*analytics*
+
+# Block the new TLD's created by "Genius" Google that are being widely exploited for phishing and malware
+*.zip
+*.mov
+
+# Let's also make sure we block `tiktok.com`, `tiktokv.com`, `tiktokcdn.com` and all their subdomains
+**.tiktok*.com*
+```
 
 **Tip** - Test your rules with `swiftdns resolve example.com`. If done correctly, trying to resolve a blacklisted domain should give you an error.
 
 ## Whitelisting
 
-The syntax for whitelisting is identical to that of blacklisting. The only difference is that they _have_ to be located in the already-created file `/etc/swiftdns/rules/whitelist.txt`. The whitelist takes precedence over any blacklist file.
+The syntax for whitelisting is identical to that of blacklisting.
+The only difference is that they _have_ to be located in the already-created file `/etc/swiftdns/filters/whitelist.list`.
+The whitelist takes precedence over any blacklist file.
 
 ## Tor
 
-To achieve the most privacy possible, you can route your traffic through Tor. See [configuration](#configuration) (note that this will drastically increase the time it takes to query).
+To achieve the most privacy possible, you can route your traffic through Tor. See [configuration](#configuration) (note that this can drastically increase the time it takes to query).
 
 ## Configuration
 
-You can configure SwiftDNS to behave to your liking. To change a setting, simply open `/etc/swiftdns/conf.d/default-config.toml` in a text editor (note that this requires root privileges). After saving your configuration file, run `systemctl restart swiftdns` to clear the cache.
+You can configure Swiftdns to behave to your liking.
+To change a setting, simply open `/etc/swiftdns/config.toml` in a text editor (note that this requires root permissions).
+After saving your configuration file, run `systemctl restart swiftdns` to have the changes applied.
 
-The different configuration options have more elaborate documentation within the config file.
+(Visit the configuration file itself for more elaborate descriptions.)
 
 | Key     | Default         | Value(s)                           | Description                              |
 | ------- | --------------- | ---------------------------------- | ---------------------------------------- |
-| mode    | `Standard`      | One of `Standard`, `Safe`, `Clean` | Configure which mode to run SwiftDNS in  |
+| mode    | `Standard`      | One of `Standard`, `Safe`, `Clean` | Configure which mode to run Swiftdns in  |
 | address | `127.0.0.53:53` | A socket address (with port)       | The address to bind the listener to      |
 | tor     | `false`         | bool                               | Whether to route DNS queries through tor |
 
@@ -81,15 +110,16 @@ The different configuration options have more elaborate documentation within the
 
 -   ### Start
 
-    Normally you would want to start it with `systemctl start swiftdns`, but you can start the listener in the foreground at 127.0.0.53:53 (or specify address with `--address <socketaddr>`).
+Normally you would want to start it with `systemctl start swiftdns`,
+but you can start the listener in the foreground with the `start` subcommand (override the configured address with `--address <socketaddr>`).
 
-    ```bash
-    $ swiftdns start
-    ```
+```bash
+$ swiftdns start
+```
 
 -   ### Resolve
 
-    Resolve a domain in the terminal (specify type with `-t <type>`, default is `A`)
+Resolve a domain in the terminal (specify type with `-t <type>`, default is `A`)
 
     ```bash
     $ swiftdns resolve <domain>

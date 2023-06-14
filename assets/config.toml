@@ -1,4 +1,4 @@
-# Specify the mode you want to run SwiftDNS in. This will dictate which of Cloudflare's resolvers to use
+# Specify the mode you want to run Swiftdns in. This will dictate which of Cloudflare's resolvers to use
 # 
 # Standard = 1.1.1.1 | Resolves everything that hasn't been locally blacklisted
 # Safe = 1.1.1.2 | Resolves malware websites with `0.0.0.0`

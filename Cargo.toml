@@ -3,10 +3,8 @@ name = "swiftdns"
 version = "0.6.0"
 authors = ["chris9740"]
 edition = "2021"
-description = "A DNS client with blacklisting that resolves from Cloudflare DOH"
-license = "MIT"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "Linux DNS client with privacy & blacklisting features"
+license-file = "LICENSE"
 
 [dependencies]
 reqwest = { version = "0.11", default-features = false, features = [
@@ -25,39 +23,7 @@ bytes = "1.4.0"
 serde_json = "1.0.96"
 rand = "0.8.5"
 wildmatch = "2.1.1"
-cargo-deb = "1.43.0"
 chrono = "0.4.24"
 log = "0.4.17"
 env_logger = "0.10.0"
 confy = "0.5.1"
-
-[package.metadata.deb]
-maintainer-scripts = "debian/"
-systemd-units = { enable = true }
-depends = ""
-assets = [
-    [
-        "conf.d/default-config.toml",
-        "/etc/swiftdns/conf.d/default-config.toml",
-        "644",
-    ],
-    [
-        "target/release/swiftdns",
-        "/usr/bin/",
-        "755",
-    ],
-    [
-        "assets/capabilities.conf",
-        "/etc/systemd/system/swiftdns.service.d/capabilities.conf",
-        "644",
-    ],
-    [
-        "assets/whitelist.txt",
-        "/etc/swiftdns/rules/whitelist.txt",
-        "644",
-    ],
-]
-conf-files = [
-    "/etc/swiftdns/conf.d/default-config.toml",
-    "/etc/swiftdns/rules/whitelist.txt",
-]

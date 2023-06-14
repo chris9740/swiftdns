@@ -15,8 +15,8 @@ pub mod whitelist {
     use super::FilterEntry;
 
     pub fn find(name: &str) -> Option<FilterEntry> {
-        let whitelist_path = config::config_location().join("rules/whitelist.txt");
-        let exists = whitelist_path.try_exists().unwrap();
+        let whitelist_path = config::config_location().join("filters/whitelist.list");
+        let exists = whitelist_path.try_exists().unwrap_or(false);
 
         if !exists {
             return None;
@@ -43,7 +43,7 @@ impl FilterEntry {
 
 pub mod blacklist {
     use std::{
-        fs::{self},
+        fs::self,
         path::PathBuf,
     };
 
@@ -56,7 +56,7 @@ pub mod blacklist {
             return None;
         }
 
-        let directory_path = config::config_location().join("rules");
+        let directory_path = config::config_location().join("filters");
         let directory_read = fs::read_dir(&directory_path);
 
         if directory_read.is_err() {
@@ -75,7 +75,7 @@ pub mod blacklist {
                     return false;
                 }
 
-                if path_name == "whitelist.txt" || !path_name.ends_with(".txt") {
+                if path_name == "whitelist.list" || !path_name.ends_with(".list") {
                     return false;
                 }
 
