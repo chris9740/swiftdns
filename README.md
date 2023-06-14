@@ -23,9 +23,9 @@ This can cause Chromium to erroneously fail to resolve a domain. However, it wil
 
 To install Swiftdns, first head over to the [release page](https://github.com/chris9740/swiftdns/releases/latest).
 
-Download the `swiftdns` file and place it in `/usr/bin/swiftdns`, then download and extract `Source code.zip`.
+Download the `swiftdns` file and place it in `/usr/bin/swiftdns` and run `chmod +x /usr/bin/swiftdns`, then download and extract `Source code.zip`.
 
-Open a command-line inside the root of the source directory and execute `./scripts/install.sh`. This will create the systemd files and create a configuration file if none exists.
+Open a command-line inside the extracted directory and execute `./scripts/install.sh`. This will create the systemd files and create a configuration file if none exists.
 
 ## Features
 
