@@ -3,7 +3,6 @@ Description=Linux DNS client with privacy & blacklisting features
 
 [Service]
 User=swiftdns
-Group=swiftdns
 ExecStart=/usr/bin/swiftdns start
 Restart=on-failure
 RestartSec=3s
