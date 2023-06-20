@@ -31,6 +31,8 @@ impl Display for RecordType {
 }
 
 impl FromStr for RecordType {
+    type Err = &'static str;
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         for record_type in RecordType::iter() {
             let input = s.to_lowercase();
@@ -41,18 +43,19 @@ impl FromStr for RecordType {
             }
         }
 
-        Err(())
+        Err("Invalid record type")
     }
-
-    type Err = ();
 }
 
-impl From<&str> for RecordType {
-    fn from(value: &str) -> RecordType {
-        match RecordType::from_str(value) {
-            Ok(record_type) => record_type,
-            Err(_) => panic!("Invalid record type `{}`", value),
+impl TryFrom<&str> for RecordType {
+    type Error = &'static str;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        if let Ok(record_type) = RecordType::from_str(value) {
+            return Ok(record_type);
         }
+
+        Err("Invalid record type")
     }
 }
 
@@ -111,13 +114,12 @@ pub async fn resolve(
         .await
         .header(reqwest::header::ACCEPT, "application/dns-json")
         .send()
-        .await
-        .expect("error: could not query Cloudflare DOH server");
+        .await?;
 
     let status = res.status();
 
     if status == reqwest::StatusCode::BAD_REQUEST {
-        panic!("Bad request");
+        return Err("Bad request".into());
     }
 
     let dns_response = res.json::<DnsResponse>().await?;

@@ -57,38 +57,33 @@ pub mod blacklist {
         }
 
         let directory_path = config::config_location().join("filters");
-        let directory_read = fs::read_dir(&directory_path);
 
-        if directory_read.is_err() {
-            return None;
-        }
+        if let Ok(directory) = fs::read_dir(&directory_path) {
+            let files: Vec<PathBuf> = directory
+                .filter(|object| {
+                    let file = object.as_ref().expect("Should always be Ok");
+                    let path = file.path();
+                    let path_name = path.to_string_lossy().to_string();
 
-        let directory = directory_read.unwrap();
+                    if !path.is_file() {
+                        return false;
+                    }
 
-        let files: Vec<PathBuf> = directory
-            .filter(|object| {
-                let file = object.as_ref().expect("Should always be Ok");
-                let path = file.path();
-                let path_name = path.to_string_lossy().to_string();
+                    if path_name == "whitelist.list" || !path_name.ends_with(".list") {
+                        return false;
+                    }
 
-                if !path.is_file() {
-                    return false;
-                }
-
-                if path_name == "whitelist.list" || !path_name.ends_with(".list") {
-                    return false;
-                }
-
-                true
-            })
+                    true
+                })
             .map(|object| object.unwrap().path())
-            .collect();
+                .collect();
 
-        for path in files {
-            let result = super::enumerate(&path, name);
+            for path in files {
+                let result = super::enumerate(&path, name);
 
-            if result.is_some() {
-                return result;
+                if result.is_some() {
+                    return result;
+                }
             }
         }
 

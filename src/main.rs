@@ -2,7 +2,7 @@
 extern crate log;
 
 
-use std::{error::Error, net::SocketAddr};
+use std::{error::Error, net::SocketAddr, process};
 
 use config::get_config;
 use dns::resolver::RecordType;
@@ -64,7 +64,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )
         .get_matches();
 
-    let config = get_config().expect("Invalid configuration");
+    let config = match get_config() {
+        Ok(config) => config,
+        Err(error) => {
+            println!("Error: could not load config: {}", error.to_string());
+            process::exit(1);
+        }
+    };
 
     match matches.subcommand() {
         Some(("start", start_match)) => {
@@ -95,24 +101,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 return Ok(());
             }
 
-            let response = dns::resolver::resolve(&mut http_client, &domain.name, record_type).await.unwrap();
+            if let Ok(response) = dns::resolver::resolve(&mut http_client, &domain.name, record_type).await {
+                if let Some(answer) = response.answer {
+                    let record = answer.first().expect("Answer should have at least 1 entry");
 
-            if let Some(answer) = response.answer {
-                let record = answer.first().expect("Answer should have at least 1 entry");
-
-                info!(
-                    "the `{}` record for `{}` was resolved to {}",
-                    record_type.to_string(),
-                    domain.name,
-                    record.data
-                );
-            } else {
-                info!(
-                    "no `{}` record exists for {}",
-                    record_type.to_string(),
-                    domain.name
-                );
+                    info!(
+                        "the `{}` record for `{}` was resolved to {}",
+                        record_type.to_string(),
+                        domain.name,
+                        record.data
+                    );
+                } else {
+                    info!(
+                        "no `{}` record exists for {}",
+                        record_type.to_string(),
+                        domain.name
+                    );
+                }
             }
+
         }
         _ => panic!("Something went wrong. A subcommand was provided and accepted by clap but not caught by match"),
     };

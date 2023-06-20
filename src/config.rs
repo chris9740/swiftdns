@@ -65,7 +65,7 @@ pub fn get_config() -> Result<SwiftConfig, Box<dyn Error>> {
 
 pub fn config_location() -> PathBuf {
     if cfg!(debug_assertions) {
-        env::current_dir().unwrap().join("assets/")
+        env::current_dir().expect("Directory should exist").join("assets/")
     } else {
         Path::new("/etc/swiftdns/").to_path_buf()
     }
