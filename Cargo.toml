@@ -1,6 +1,6 @@
 [package]
 name = "swiftdns"
-version = "0.6.0"
+version = "0.7.0"
 authors = ["chris9740"]
 edition = "2021"
 description = "Linux DNS client with privacy & blacklisting features"
