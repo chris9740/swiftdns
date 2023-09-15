@@ -1,6 +1,6 @@
 # Swiftdns
 
-Swiftdns is a privacy-focused DNS client for Linux.
+Swiftdns is a privacy-focused DNS client tailored for debian distributions.
 
 ## Project
 
@@ -21,11 +21,10 @@ This can cause Chromium to erroneously fail to resolve a domain. However, it wil
 
 -   systemd
 
-To install Swiftdns, first head over to the [release page](https://github.com/chris9740/swiftdns/releases/latest).
+To install Swiftdns, first download the .deb file from the [release page](https://github.com/chris9740/swiftdns/releases/latest).
+Then, install it using your preferred method (e.g. `dpkg -i swiftdns.deb`).
 
-Download the `swiftdns` file and place it in `/usr/bin/swiftdns` and run `chmod +x /usr/bin/swiftdns`, then download and extract `Source code.zip`.
-
-Open a command-line inside the extracted directory and execute `./scripts/install.sh`. This will create the systemd files and create a configuration file if none exists.
+Don't forget to configure your computer to use Swiftdns as a resolver.
 
 ## Features
 
@@ -72,11 +71,11 @@ Let's make use of comments to describe our rules:
 # Block any domain that has the word "analytics" anywhere in it
 *analytics*
 
-# Block the new TLD's created by "Genius" Google that are being widely exploited for phishing and malware
+# Block the new TLD's created by Genius Google that are being widely exploited for phishing and malware
 *.zip
 *.mov
 
-# Let's also make sure we block `tiktok.com`, `tiktokv.com`, `tiktokcdn.com` and all their subdomains
+# Let's also make sure we block "tiktok.com", "tiktokv.com", "tiktokcdn.com" and all their subdomains
 **.tiktok*.com*
 ```
 
@@ -85,7 +84,7 @@ Let's make use of comments to describe our rules:
 ## Whitelisting
 
 The syntax for whitelisting is identical to that of blacklisting.
-The only difference is that they _have_ to be located in the already-created file `/etc/swiftdns/filters/whitelist.list`.
+The only difference is that the rules _have_ to be located in the already-created file `/etc/swiftdns/filters/whitelist.list`.
 The whitelist takes precedence over any blacklist file.
 
 ## Tor
@@ -98,12 +97,13 @@ You can configure Swiftdns to behave to your liking.
 To change a setting, simply open `/etc/swiftdns/config.toml` in a text editor (note that this requires root permissions).
 After saving your configuration file, run `systemctl restart swiftdns` to have the changes applied.
 
-(Visit the configuration file itself for more elaborate descriptions.)
+The value for `mode` will dictate which of Cloudflare's resolvers to use. `Standard = 1.1.1.1`, `Safe = 1.1.1.2` (blocks malware), `Clean = 1.1.1.3` (blocks malware and adult websites).
+In contrast to Swiftdns, Cloudflare blocks domains by "resolving" them with `0.0.0.0`, while Swiftdns returns the `REFUSED` status.
 
 | Key     | Default         | Value(s)                           | Description                              |
 | ------- | --------------- | ---------------------------------- | ---------------------------------------- |
 | mode    | `Standard`      | One of `Standard`, `Safe`, `Clean` | Configure which mode to run Swiftdns in  |
-| address | `127.0.0.53:53` | A socket address (with port)       | The address to bind the listener to      |
+| address | `127.0.0.1:53`  | A socket address (with port)       | The address to bind the listener to      |
 | tor     | `false`         | bool                               | Whether to route DNS queries through tor |
 
 ## Commands
@@ -121,6 +121,8 @@ $ swiftdns start
 
 Resolve a domain in the terminal (specify type with `-t <type>`, default is `A`)
 
-    ```bash
-    $ swiftdns resolve <domain>
-    ```
+```bash
+$ swiftdns resolve <domain>
+```
+
+Of course, you can always run `swiftdns --help` to get more detailed documentation.

@@ -1,6 +1,6 @@
 # Project assets
 
-This directory includes assets that are used during installation. This includes the default config file, systemd files, project metadata, and a preset of recommended blacklists.
+This directory contains a set of recommended blacklists to block some of the most common privacy-violating websites, such as Google (including DoubleClick), Tiktok, among others.
 
 The domains used in the blacklists were gathered from [netify.ai](https://www.netify.ai/resources/applications) and can be found inside of the `filters/` directory.
 

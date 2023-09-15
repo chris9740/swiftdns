@@ -1,12 +1,74 @@
 use std::{
-    fs::File,
+    fs::{self, File},
     io::{BufRead, BufReader},
     path::PathBuf,
 };
 
+use anyhow::Result;
 use wildmatch::WildMatch;
 
 use crate::domain::Domain;
+
+#[derive(serde::Serialize, Debug)]
+pub struct Filter {
+    #[serde(skip_serializing)]
+    pub path: PathBuf,
+    #[serde(skip_serializing)]
+    pub pathname: String,
+    #[serde(skip_serializing)]
+    pub contents: String,
+    pub filename: String,
+}
+
+pub struct FilterEntry {
+    pub file: String,
+    pub pattern: String,
+    pub line: usize,
+}
+
+impl FilterEntry {
+    pub fn format_message(&self, domain: &Domain) -> String {
+        format!(
+            "the domain `{}` has been blacklisted (pattern `{}`, {}:{}), refusing to resolve.",
+            domain.name(),
+            self.pattern,
+            self.file,
+            self.line
+        )
+    }
+}
+
+pub fn get_filters() -> Result<Vec<Filter>> {
+    use crate::config;
+
+    let directory_path = config::config_location().join("filters");
+    let directory = fs::read_dir(directory_path)?;
+
+    let filters: Vec<Filter> = directory
+        .filter_map(|object| {
+            let dir_entry = object.expect("Should always be Ok");
+
+            let path = dir_entry.path();
+            let pathname = path.to_string_lossy().to_string();
+
+            if !path.is_file() || !pathname.ends_with(".list") {
+                return None;
+            }
+
+            let contents = fs::read_to_string(&path).unwrap_or_default();
+            let filename = path.file_name()?.to_string_lossy().to_string();
+
+            Some(Filter {
+                path,
+                pathname,
+                filename,
+                contents
+            })
+        })
+        .collect();
+
+    Ok(filters)
+}
 
 pub mod whitelist {
 
@@ -26,29 +88,7 @@ pub mod whitelist {
     }
 }
 
-pub struct FilterEntry {
-    pub file: String,
-    pub pattern: String,
-    pub line: usize,
-}
-
-impl FilterEntry {
-    pub fn format_message(&self, domain: &Domain) -> String {
-        format!(
-            "the domain `{}` has been blacklisted (pattern `{}`, {}:{}), refusing to resolve.",
-            domain.name, self.pattern, self.file, self.line
-        )
-    }
-}
-
 pub mod blacklist {
-    use std::{
-        fs::self,
-        path::PathBuf,
-    };
-
-    use crate::config;
-
     use super::FilterEntry;
 
     pub fn find(name: &str) -> Option<FilterEntry> {
@@ -56,34 +96,17 @@ pub mod blacklist {
             return None;
         }
 
-        let directory_path = config::config_location().join("filters");
+        let filters = super::get_filters().unwrap();
 
-        if let Ok(directory) = fs::read_dir(&directory_path) {
-            let files: Vec<PathBuf> = directory
-                .filter(|object| {
-                    let file = object.as_ref().expect("Should always be Ok");
-                    let path = file.path();
-                    let path_name = path.to_string_lossy().to_string();
+        let blacklists = filters
+            .iter()
+            .filter(|filter| filter.filename != "whitelist.list");
 
-                    if !path.is_file() {
-                        return false;
-                    }
+        for filter in blacklists {
+            let result = super::enumerate(&filter.path, name);
 
-                    if path_name == "whitelist.list" || !path_name.ends_with(".list") {
-                        return false;
-                    }
-
-                    true
-                })
-            .map(|object| object.unwrap().path())
-                .collect();
-
-            for path in files {
-                let result = super::enumerate(&path, name);
-
-                if result.is_some() {
-                    return result;
-                }
+            if result.is_some() {
+                return result;
             }
         }
 

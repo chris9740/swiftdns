@@ -2,15 +2,15 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 
 use dns_message_parser::{
     rr::{self, RR},
-    DecodeError, Dns, DomainName, Flags,
+    DecodeError, Dns, DomainName, Flags, EncodeError,
 };
 
 use self::resolver::{DnsAnswer, RecordType};
 
 pub mod resolver;
 
-pub fn encode(query: Dns) -> Result<bytes::BytesMut, ()> {
-    let dns = Dns::encode(&Dns {
+pub fn encode(query: Dns) -> Result<bytes::BytesMut, EncodeError> {
+    Dns::encode(&Dns {
         id: query.id,
         flags: Flags {
             qr: true,
@@ -28,9 +28,6 @@ pub fn encode(query: Dns) -> Result<bytes::BytesMut, ()> {
         questions: query.questions,
         answers: query.answers,
     })
-    .unwrap();
-
-    Ok(dns)
 }
 
 pub fn decode(query_bytes: &[u8]) -> Result<Dns, DecodeError> {

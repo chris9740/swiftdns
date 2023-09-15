@@ -17,7 +17,7 @@ Using this hook is recommended in order to make your developing experience as fr
 You can adopt our hook by running the following command:
 
 ```bash
-git config core.hooksPath .hooks/
+git config core.hooksPath .github/hooks/
 ```
 
 Once you've ran the command above, the hook will be executed every time you run `git commit`, and will cancel the commit if the commit message is improper or if the code doesn't pass the tests.

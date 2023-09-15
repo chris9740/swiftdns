@@ -1,18 +1,12 @@
-#[macro_use]
-extern crate log;
-
-
-use std::{error::Error, net::SocketAddr, process};
-
-use config::get_config;
 use dns::resolver::RecordType;
 use domain::Domain;
-use env_logger::Builder;
-use log::LevelFilter;
 
-use clap::{crate_description, crate_version, Arg, Command};
 use serde::Deserialize;
 
+#[macro_use]
+mod macros;
+
+mod cli;
 mod cache;
 mod config;
 mod dns;
@@ -22,107 +16,6 @@ mod http;
 mod listener;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let log_level = if cfg!(debug_assertions) {
-        LevelFilter::Debug
-    } else {
-        LevelFilter::Info
-    };
-
-    Builder::new().filter_level(log_level).init();
-
-    let matches = Command::new("swiftdns")
-        .version(crate_version!())
-        .about(crate_description!())
-        .arg_required_else_help(true)
-        .subcommand(
-            Command::new("start").about("Start the DNS listener").arg(
-                Arg::new("address")
-                    .short('a')
-                    .long("address")
-                    .required(false)
-                    .value_parser(clap::value_parser!(SocketAddr))
-                    .help("Specify the address for the DNS client to listen on"),
-            ),
-        )
-        .subcommand(
-            Command::new("resolve")
-                .about("Resolve a domain name")
-                .arg(
-                    Arg::new("name")
-                        .help("Domain to resolve")
-                        .value_parser(clap::value_parser!(Domain))
-                        .required(true),
-                )
-                .arg(
-                    Arg::new("type")
-                        .short('t')
-                        .help("The type of record to resolve (A, AAAA)")
-                        .default_value("A")
-                        .value_parser(clap::value_parser!(RecordType)),
-                ),
-        )
-        .get_matches();
-
-    let config = match get_config() {
-        Ok(config) => config,
-        Err(error) => {
-            println!("Error: could not load config: {}", error.to_string());
-            process::exit(1);
-        }
-    };
-
-    match matches.subcommand() {
-        Some(("start", start_match)) => {
-            let debug_addr = "127.0.0.1:5053".parse::<SocketAddr>().unwrap();
-            let release_addr = config.address;
-
-            let addr = {
-                if let Some(specified_addr) = start_match.get_one::<SocketAddr>("address") {
-                    specified_addr
-                } else if cfg!(debug_assertions) {
-                    &debug_addr
-                } else {
-                    &release_addr
-                }
-            };
-
-            listener::start(addr, &config).await;
-        },
-        Some(("resolve", resolve_match)) => {
-            let domain = resolve_match.get_one::<Domain>("name").unwrap();
-            let record_type = resolve_match.get_one::<RecordType>("type").unwrap();
-
-            let mut http_client = http::client::Client::new(&config).expect("Should be able to build client wrapper");
-
-            if let Some(entry) = filter::blacklist::find(&domain.name) {
-                info!("{}", entry.format_message(domain));
-
-                return Ok(());
-            }
-
-            if let Ok(response) = dns::resolver::resolve(&mut http_client, &domain.name, record_type).await {
-                if let Some(answer) = response.answer {
-                    let record = answer.first().expect("Answer should have at least 1 entry");
-
-                    info!(
-                        "the `{}` record for `{}` was resolved to {}",
-                        record_type.to_string(),
-                        domain.name,
-                        record.data
-                    );
-                } else {
-                    info!(
-                        "no `{}` record exists for {}",
-                        record_type.to_string(),
-                        domain.name
-                    );
-                }
-            }
-
-        }
-        _ => panic!("Something went wrong. A subcommand was provided and accepted by clap but not caught by match"),
-    };
-
-    Ok(())
+async fn main() {
+    cli::parse_args().await;
 }

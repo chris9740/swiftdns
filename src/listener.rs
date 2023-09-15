@@ -1,6 +1,6 @@
-use std::net::{SocketAddr, UdpSocket};
+use std::{net::{SocketAddr, UdpSocket}, error::Error, io::ErrorKind};
 
-use chrono::Utc;
+use anyhow::Result;
 use dns_message_parser::{Dns, RCode};
 
 use crate::{
@@ -11,141 +11,114 @@ use crate::{
         resolver::{DnsQuestion, RecordType},
     },
     domain::Domain,
-    filter, http,
+    filter, http::client::Client
 };
 
-pub async fn start(addr: &SocketAddr, config: &SwiftConfig) {
+macro_rules! ok_or_rcode {
+    ($result:expr, mut $query:expr, $rcode:expr) => {
+        match $result {
+            Ok(val) => val,
+            Err(_) => {
+                $query.flags.rcode = $rcode;
+
+                return Ok(());
+            }
+        }
+    }
+}
+
+async fn handle_query(query: &mut Dns, client: &mut Client, cache: &mut Cache) -> Result<(), Box<dyn Error>> {
+    // Multiple questions are technically allowed in the protocol, but rarely supported.
+    if query.questions.len() != 1 {
+        query.flags.rcode = RCode::FormErr;
+
+        return Ok(());
+    }
+
+    let question = query.questions.get(0).unwrap();
+    let domain: Domain = ok_or_rcode!(question.domain_name.to_string().parse(), mut query, RCode::NXDomain);
+    let record_type: RecordType = ok_or_rcode!(question.q_type.to_string().parse(), mut query, RCode::NotImp);
+
+    if let Some(entry) = filter::blacklist::find(domain.name()) {
+        println!("{}", entry.format_message(&domain));
+
+        query.flags.rcode = RCode::Refused;
+
+        return Ok(());
+    }
+    
+    let question = DnsQuestion {
+        name: domain.name().to_string(),
+        r#type: record_type.value(),
+    };
+
+    let cached = cache.get(&question);
+
+    let response = if let Some(cached) = cached.clone() {
+        cached.response
+    } else {
+        dns::resolver::resolve(client, domain.name(), &record_type)
+            .await?
+    };
+
+    if !response.answer.is_empty() {
+        if cached.is_none() {
+            cache.set(question.clone(), &response);
+        }
+
+        query.answers = dns::group_answers(&response.answer);
+    } else {
+        query.flags.rcode = RCode::NXDomain;
+    }
+
+    Ok(())
+}
+
+pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
     let mut client =
-        http::client::Client::new(config).expect("Should be able to build client wrapper");
+        Client::new(config).expect("Should be able to build client wrapper");
 
     let mut cache = Cache::new();
 
     let socket = match UdpSocket::bind(addr) {
         Ok(socket) => socket,
-        Err(err) => panic!(
-            "failed to bind listener on addr `{}` ({})",
-            addr.to_string(),
-            err
-        ),
+        Err(err) => {
+            let suffix = match err.kind() {
+                ErrorKind::PermissionDenied => {
+                    "Permission denied".to_string()
+                },
+                ErrorKind::AddrInUse => {
+                    "Address already in use".to_string()
+                },
+                err => format!("binding error ({})", err)
+            };
+
+            error!("Failed to bind listener on addr `{addr}` ({suffix})");
+        }
     };
 
-    info!("listening on {addr}");
+    println!("Listening on {addr}");
 
     loop {
         let mut buf = [0; 512];
-        let (amt, src) = socket.recv_from(&mut buf).unwrap();
-        let mut query = dns::decode(&buf[..amt]).unwrap();
+        let (amt, src) = socket.recv_from(&mut buf)?;
 
-        let question = query.questions.get(0).unwrap();
-        let domain = Domain::from(question.domain_name.to_string().as_str());
+        match dns::decode(&buf[..amt]) {
+            Ok(mut query) => {
+                match handle_query(&mut query, &mut client, &mut cache).await {
+                    Ok(()) => {
+                        let encoded = dns::encode(query)?;
 
-        let q_type = question.q_type.to_string();
-        let record_type: RecordType = q_type.parse().unwrap_or(RecordType::A);
-
-        if let Some(entry) = filter::blacklist::find(&domain.name) {
-            let mut flags = query.flags.clone();
-
-            info!("{}", entry.format_message(&domain));
-
-            flags.rcode = RCode::Refused;
-
-            let dns = Dns {
-                id: query.id,
-                flags,
-                questions: query.questions,
-                additionals: Vec::new(),
-                answers: Vec::new(),
-                authorities: Vec::new(),
-            };
-
-            let response = dns::encode(dns).unwrap();
-
-            socket.send_to(&response, src).unwrap();
-
-            continue;
-        }
-
-        let question = DnsQuestion {
-            name: domain.name.clone(),
-            r#type: record_type.value(),
-        };
-
-        let cached_response = cache.get(&question);
-        let was_cached = cached_response.is_some();
-
-        let start_time = Utc::now().time();
-
-        let response = {
-            if was_cached {
-                let unwrapped = cached_response.unwrap();
-
-                unwrapped.response.clone()
-            } else {
-                dns::resolver::resolve(&mut client, &domain.name, &record_type)
-                    .await
-                    .unwrap()
-            }
-        };
-
-        let end_time = Utc::now().time();
-        let total_time = end_time - start_time;
-
-        if !was_cached && response.answer.is_some() {
-            cache.set(question, &response);
-        }
-
-        if let Some(answers) = response.answer {
-            query.answers = dns::group_answers(&answers);
-
-            let encoding_result = dns::encode(query);
-
-            if let Ok(encoded) = encoding_result {
-                socket.send_to(&encoded, src).unwrap();
-
-                info!(
-                    "successfully resolved `{}` record for `{}` ({}, {}ms)",
-                    record_type.to_string(),
-                    &domain.name,
-                    {
-                        if was_cached {
-                            "cached"
-                        } else {
-                            "not cached"
-                        }
+                        socket.send_to(&encoded, src)?;
                     },
-                    total_time.num_milliseconds()
-                );
-            } else {
-                warn!(
-                    "notice: silently ignoring resolution of `{}` record for `{}`",
-                    record_type.to_string(),
-                    &domain.name
-                );
-                debug!("something went wrong when encoding: {:?}", encoding_result);
+                    Err(err) => {
+                        eprintln!("There was an error while resolving: {}", err);
+                    }
+                };
+            },
+            Err(err) => {
+                eprintln!("Error, received invalid query: {}", err);
             }
-        } else {
-            let mut flags = query.flags.clone();
-
-            flags.rcode = RCode::NXDomain;
-
-            let dns = Dns {
-                id: query.id,
-                flags,
-                questions: query.questions,
-                additionals: Vec::new(),
-                answers: Vec::new(),
-                authorities: Vec::new(),
-            };
-
-            let encoded = dns::encode(dns).unwrap();
-
-            socket.send_to(&encoded, src).unwrap();
-
-            info!(
-                "no `{}` record exists for {}",
-                record_type.to_string(),
-                domain.name
-            );
         }
     }
 }

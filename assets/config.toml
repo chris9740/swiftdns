@@ -1,12 +1,5 @@
-# Specify the mode you want to run Swiftdns in. This will dictate which of Cloudflare's resolvers to use
-# 
-# Standard = 1.1.1.1 | Resolves everything that hasn't been locally blacklisted
-# Safe = 1.1.1.2 | Resolves malware websites with `0.0.0.0`
-# Clean = 1.1.1.3 | Resolves malware and adult websites with `0.0.0.0`
+# Configuration file used in development
+
 mode = "Standard"
-
-# The socket address to bind the listener to
-address = "127.0.0.53:53"
-
-# Whether to route DNS queries through tor
+address = "127.0.0.1:5053"
 tor = false

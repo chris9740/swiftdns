@@ -1,5 +1,6 @@
 [Unit]
 Description=Linux DNS client with privacy & blacklisting features
+After=systemd-networkd.service
 
 [Service]
 User=swiftdns

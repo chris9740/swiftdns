@@ -8,7 +8,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
 
-#[derive(Serialize, Deserialize, EnumIter)]
+#[derive(Debug, Serialize, Deserialize, EnumIter)]
 pub enum Mode {
     Standard,
     Safe,
@@ -16,11 +16,11 @@ pub enum Mode {
 }
 
 impl Mode {
-    pub fn ip_address(&self) -> String {
+    pub fn ip_address(&self) -> &str {
         match self {
-            Mode::Standard => String::from("1.1.1.1"),
-            Mode::Safe => String::from("1.1.1.2"),
-            Mode::Clean => String::from("1.1.1.3"),
+            Mode::Standard => "1.1.1.1",
+            Mode::Safe => "1.1.1.2",
+            Mode::Clean => "1.1.1.3",
         }
     }
 }
@@ -39,7 +39,7 @@ impl From<&str> for Mode {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SwiftConfig {
     pub mode: Mode,
     pub address: SocketAddr,
@@ -50,7 +50,7 @@ impl std::default::Default for SwiftConfig {
     fn default() -> Self {
         Self {
             mode: Mode::Standard,
-            address: "127.0.0.53:53".parse().unwrap(),
+            address: "127.0.0.1:53".parse().unwrap(),
             tor: false,
         }
     }

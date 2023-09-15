@@ -1,0 +1,12 @@
+#!/bin/bash
+
+#DEBHELPER#
+
+adduser --quiet --system --shell /usr/sbin/nologin --no-create-home swiftdns
+
+mkdir -p /etc/swiftdns/filters
+
+chown swiftdns -R /etc/swiftdns
+chmod 755 -R /etc/swiftdns
+
+exit 0

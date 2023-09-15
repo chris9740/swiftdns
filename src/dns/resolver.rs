@@ -1,5 +1,7 @@
-use std::{error::Error, fmt::Display, str::FromStr};
+use std::{error::Error, fmt::Display, str::FromStr, io::Write};
+use colored::Colorize;
 use strum::{EnumIter, IntoEnumIterator};
+use tabwriter::TabWriter;
 
 use crate::{config, http};
 
@@ -51,11 +53,7 @@ impl TryFrom<&str> for RecordType {
     type Error = &'static str;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if let Ok(record_type) = RecordType::from_str(value) {
-            return Ok(record_type);
-        }
-
-        Err("Invalid record type")
+        RecordType::from_str(value)
     }
 }
 
@@ -74,8 +72,45 @@ pub struct DnsResponse {
     #[serde(rename = "CD")]
     pub cd: bool,
     pub question: Option<Vec<DnsQuestion>>,
-    pub answer: Option<Vec<DnsAnswer>>,
+    #[serde(default)]
+    pub answer: Vec<DnsAnswer>,
     pub authority: Option<Vec<DnsAnswer>>,
+}
+
+impl DnsResponse {
+    pub fn display(&self, record_type: &RecordType) -> Result<String, Box<dyn Error>> {
+        let mut tw = TabWriter::new(vec![]);
+        let header = vec!["domain", "type", "ttl", "data"];
+
+        let records: String = self.answer
+            .clone()
+            .into_iter()
+            .map(|record| {
+                vec![
+                    idna::domain_to_unicode(&record.domain_name).0,
+                    format!("{} ({})", record_type.to_string(), record_type.value()),
+                    format!("{} secs", record.ttl),
+                    record.data
+                ].join("\t")
+            })
+            .collect::<Vec<String>>()
+            .join("\n");
+
+        write!(&mut tw, "{}\n{records}", header.join("\t"))?;
+
+        tw.flush()?;
+
+        let formatted = String::from_utf8(tw.into_inner()?)?;
+        let mut output_splitter = formatted.splitn(2, '\n');
+        let mut header_line: String = output_splitter.next().unwrap_or("").to_string();
+        let remaining: String = output_splitter.next().unwrap_or("").to_string();
+
+        for item in header {
+            header_line = header_line.replace(item, &item.on_bright_white().black());
+        }
+
+        Ok(format!("{header_line}\n{remaining}"))
+    }
 }
 
 #[derive(crate::Deserialize, Debug, Clone)]
@@ -99,13 +134,13 @@ pub async fn resolve(
     name: &str,
     record_type: &RecordType,
 ) -> Result<DnsResponse, Box<dyn Error>> {
-    let config = config::get_config().unwrap();
+    let config = config::get_config()?;
     let resolver_ip = config.mode.ip_address();
 
     let url = format!(
         "https://{}/dns-query?name={}&type={}&do=1",
         resolver_ip,
-        urlencoding::encode(name),
+        name,
         &record_type.to_string()
     );
 
