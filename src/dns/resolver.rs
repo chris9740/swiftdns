@@ -105,8 +105,9 @@ impl DnsResponse {
         let mut header_line: String = output_splitter.next().unwrap_or("").to_string();
         let remaining: String = output_splitter.next().unwrap_or("").to_string();
 
+        #[allow(clippy::unnecessary_to_owned)]
         for item in header {
-            header_line = header_line.replace(item, &item.on_bright_white().black());
+            header_line = header_line.replace(item, &item.on_bright_white().black().to_string());
         }
 
         Ok(format!("{header_line}\n{remaining}"))
