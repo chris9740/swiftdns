@@ -1,21 +1,31 @@
-pub fn proxy() -> reqwest::Proxy {
-    reqwest::Proxy::all("socks5h://127.0.0.1:9050")
-        .expect("Could not find tor proxy at 127.0.0.1:9050")
+pub fn proxy(address: &str) -> reqwest::Proxy {
+    reqwest::Proxy::all(format!("socks5h://{address}"))
+        .unwrap_or_else(|_| {
+            error!("Invalid socket address was provided ({address})");
+        })
 }
 
 pub async fn validate_client_proxy(client: &reqwest::Client) {
+    let connectivity_check_url = "https://check.torproject.org";
+
     let res = client
-        .get("https://check.torproject.org")
+        .get(connectivity_check_url)
         .send()
         .await
-        .expect("Could not connect to https://check.torproject.org");
+        .unwrap_or_else(|_| {
+            error!("Could not connect to {connectivity_check_url}");
+        });
 
     let text = res
         .text()
         .await
-        .expect("Should be able to get text from response body");
+        .unwrap_or_else(|_| {
+            error!("Could not read response from {connectivity_check_url}")
+        });
 
-    let is_tor = text.contains("Congratulations. This browser is configured to use Tor.");
+    let is_connected = text.contains("Congratulations. This browser is configured to use Tor.");
 
-    assert!(is_tor, "did not successfully connect to tor");
+    if !is_connected {
+        error!("Unsuccessful connection to Tor. Integrity and correctness assertion failed, exiting.");
+    }
 }

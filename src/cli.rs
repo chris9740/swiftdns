@@ -61,7 +61,7 @@ pub async fn parse_args() {
         },
         Commands::Resolve { domain, record_type, tor } => {
             if tor {
-                config.tor = true;
+                config.tor.enabled = true;
             }
 
             let domain_name = domain.name();

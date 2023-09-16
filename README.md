@@ -100,11 +100,17 @@ After saving your configuration file, run `systemctl restart swiftdns` to have t
 The value for `mode` will dictate which of Cloudflare's resolvers to use. `Standard = 1.1.1.1`, `Safe = 1.1.1.2` (blocks malware), `Clean = 1.1.1.3` (blocks malware and adult websites).
 In contrast to Swiftdns, Cloudflare blocks domains by "resolving" them with `0.0.0.0`, while Swiftdns returns the `REFUSED` status.
 
-| Key     | Default         | Value(s)                           | Description                              |
-| ------- | --------------- | ---------------------------------- | ---------------------------------------- |
-| mode    | `Standard`      | One of `Standard`, `Safe`, `Clean` | Configure which mode to run Swiftdns in  |
-| address | `127.0.0.1:53`  | A socket address (with port)       | The address to bind the listener to      |
-| tor     | `false`         | bool                               | Whether to route DNS queries through tor |
+| Key     | Default        | Value(s)                           | Description                             |
+| ------- | -------------- | ---------------------------------- | --------------------------------------- |
+| mode    | `Standard`     | One of `Standard`, `Safe`, `Clean` | Configure which mode to run Swiftdns in |
+| address | `127.0.0.1:53` | A socket address (with port)       | The address to bind the listener to     |
+| tor     | -              | [TorConfig](#tor-configuration)    | Configuration options for Tor           |
+
+### Tor Configuration
+| Key         | Default          | Value(s)                     | Description                              |
+| ----------- | ---------------- | ---------------------------- | ---------------------------------------- |
+| tor.enabled | `false`          | bool                         | Whether to route DNS queries through tor |
+| tor.address | `127.0.0.1:9050` | A socket address (with port) | The address your Tor proxy is using      |
 
 ## Commands
 

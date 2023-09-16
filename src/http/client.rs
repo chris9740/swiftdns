@@ -13,8 +13,9 @@ pub struct Client {
 
 impl Client {
     pub fn new(config: &SwiftConfig) -> Result<Self, Box<dyn Error>> {
-        let client = if config.tor {
-            let proxy = tor::proxy();
+        let client = if config.tor.enabled {
+            let address = config.tor.get_address();
+            let proxy = tor::proxy(&address);
 
             reqwest::Client::builder()
                 .proxy(proxy)
@@ -24,10 +25,10 @@ impl Client {
             reqwest::Client::new()
         };
 
-        // We only need to validate the client if tor is enabled
-        let validated = !config.tor;
+        let should_validate = config.tor.enabled;
+        let is_validated = !should_validate;
 
-        Ok(Client { client, validated })
+        Ok(Client { client, validated: is_validated })
     }
 
     pub async fn get<U>(&mut self, url: U) -> RequestBuilder
