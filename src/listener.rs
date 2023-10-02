@@ -1,4 +1,8 @@
-use std::{net::{SocketAddr, UdpSocket}, error::Error, io::ErrorKind};
+use std::{
+    error::Error,
+    io::ErrorKind,
+    net::{SocketAddr, UdpSocket},
+};
 
 use anyhow::Result;
 use dns_message_parser::{Dns, RCode};
@@ -11,7 +15,8 @@ use crate::{
         resolver::{DnsQuestion, RecordType},
     },
     domain::Domain,
-    filter, http::client::Client
+    filter,
+    http::client::Client,
 };
 
 macro_rules! ok_or_rcode {
@@ -24,11 +29,15 @@ macro_rules! ok_or_rcode {
                 return Ok(());
             }
         }
-    }
+    };
 }
 
-async fn handle_query(query: &mut Dns, client: &mut Client, cache: &mut Cache) -> Result<(), Box<dyn Error>> {
-    // Multiple questions are technically allowed in the protocol, but rarely supported.
+async fn handle_query(
+    query: &mut Dns,
+    client: &mut Client,
+    cache: &mut Cache,
+) -> Result<(), Box<dyn Error>> {
+    // Multiple questions are *technically* allowed in the protocol, but rarely supported.
     if query.questions.len() != 1 {
         query.flags.rcode = RCode::FormErr;
 
@@ -36,8 +45,18 @@ async fn handle_query(query: &mut Dns, client: &mut Client, cache: &mut Cache) -
     }
 
     let question = query.questions.get(0).unwrap();
-    let domain: Domain = ok_or_rcode!(question.domain_name.to_string().parse(), mut query, RCode::NXDomain);
-    let record_type: RecordType = ok_or_rcode!(question.q_type.to_string().parse(), mut query, RCode::NotImp);
+
+    let domain: Domain = ok_or_rcode!(
+        question.domain_name.to_string().parse(),
+        mut query,
+        RCode::NXDomain
+    );
+
+    let record_type: RecordType = ok_or_rcode!(
+        question.q_type.to_string().parse(),
+        mut query,
+        RCode::NotImp
+    );
 
     if let Some(entry) = filter::blacklist::find(domain.name()) {
         println!("{}", entry.format_message(&domain));
@@ -46,7 +65,7 @@ async fn handle_query(query: &mut Dns, client: &mut Client, cache: &mut Cache) -
 
         return Ok(());
     }
-    
+
     let question = DnsQuestion {
         name: domain.name().to_string(),
         r#type: record_type.value(),
@@ -57,8 +76,7 @@ async fn handle_query(query: &mut Dns, client: &mut Client, cache: &mut Cache) -
     let response = if let Some(cached) = cached.clone() {
         cached.response
     } else {
-        dns::resolver::resolve(client, domain.name(), &record_type)
-            .await?
+        dns::resolver::resolve(client, domain.name(), &record_type).await?
     };
 
     if !response.answer.is_empty() {
@@ -75,22 +93,16 @@ async fn handle_query(query: &mut Dns, client: &mut Client, cache: &mut Cache) -
 }
 
 pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
-    let mut client =
-        Client::new(config).expect("Should be able to build client wrapper");
-
+    let mut client = Client::new(config).expect("Should be able to build client wrapper");
     let mut cache = Cache::new();
 
     let socket = match UdpSocket::bind(addr) {
         Ok(socket) => socket,
         Err(err) => {
             let suffix = match err.kind() {
-                ErrorKind::PermissionDenied => {
-                    "Permission denied".to_string()
-                },
-                ErrorKind::AddrInUse => {
-                    "Address already in use".to_string()
-                },
-                err => format!("binding error ({})", err)
+                ErrorKind::PermissionDenied => "Permission denied".to_string(),
+                ErrorKind::AddrInUse => "Address already in use".to_string(),
+                err => format!("binding error ({})", err),
             };
 
             error!("Failed to bind listener on addr `{addr}` ({suffix})");
@@ -105,17 +117,14 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
 
         match dns::decode(&buf[..amt]) {
             Ok(mut query) => {
-                match handle_query(&mut query, &mut client, &mut cache).await {
-                    Ok(()) => {
-                        let encoded = dns::encode(query)?;
+                if let Err(why) = handle_query(&mut query, &mut client, &mut cache).await {
+                    eprintln!("There was an error while resolving: {}", why);
+                    continue;
+                }
 
-                        socket.send_to(&encoded, src)?;
-                    },
-                    Err(err) => {
-                        eprintln!("There was an error while resolving: {}", err);
-                    }
-                };
-            },
+                let encoded = dns::encode(query)?;
+                socket.send_to(&encoded, src)?;
+            }
             Err(err) => {
                 eprintln!("Error, received invalid query: {}", err);
             }
