@@ -1,0 +1,69 @@
+#!/bin/bash
+
+prefixes=(
+    "feat"
+    "fix"
+    "docs"
+    "style"
+    "refactor"
+    "test"
+    "chore"
+    "security"
+)
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+LIGHT_GRAY='\033[0;37m'
+LIGHT_RED='\033[1;31m'
+ITALIC='\033[3m'
+COLOR_OFF='\033[0m'
+
+print_error() {
+    echo -e "${LIGHT_GRAY}(pre-commit)${COLOR_OFF} ${LIGHT_RED}error${COLOR_OFF}: $1"
+}
+
+if ! command -v cargo >/dev/null 2>&1; then
+    print_error "cargo is not installed"
+    exit 1
+fi
+
+# Current commit message exists in a file, the name of the file is passed as the `$1` argument
+commit_message=$(head -n1 $1)
+
+fail() {
+    print_error "invalid commit message: \"${RED}$commit_message${COLOR_OFF}\": $1"
+}
+
+validate_commit_message() {
+    # We want the upper limit of the commit title length to be 72,
+    # because that's the longest it can be without being ellipsied on the website
+    if ((${#commit_message} > 72)); then
+        fail "message too long (${#commit_message} > 72)"
+        exit 1
+    fi
+
+    # Matches "0.1.2" and "0.1.2 (#3)" ("#3" is an example PR id)
+    if [[ $commit_message =~ ^[0-9]+\.[0-9]+\.[0-9]+( \(#([0-9]+)\))?$ ]]; then
+        return
+    fi
+
+    if [[ $commit_message =~ ^"Merge pull request" || $commit_message =~ ^"Merge branch" ]]; then
+        return
+    fi
+
+    for prefix in "${prefixes[@]}"; do
+        if [[ $commit_message =~ ^$prefix: || $commit_message =~ ^$prefix"(".*")" ]]; then
+            return
+        fi
+    done
+
+    fail "invalid commit message"
+    print_error "valid message is either a merge message, or has valid type (e.g. \"${GREEN}fix: ...${COLOR_OFF}\" or \"${GREEN}feat(filter): ...${COLOR_OFF}\")"
+    exit 1
+}
+
+validate_commit_message
+
+cargo clippy
+cargo test
