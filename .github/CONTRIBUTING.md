@@ -10,7 +10,7 @@ Commit messages should follow the [Semantic Commit Messages](https://gist.github
 
 ### Verify conformity before commit
 
-This repository has a `prepare-commit-message` hook that ensures the code is formatted by clippy, passes the tests, as well as making sure the commit message follows the conventions above.
+This repository has a `prepare-commit-msg` hook that ensures the code is formatted by clippy, passes the tests, as well as making sure the commit message follows the conventions above.
 
 Using this hook is recommended in order to make your developing experience as frictionless as possible, but it is not required.
 
