@@ -20,7 +20,7 @@ ITALIC='\033[3m'
 COLOR_OFF='\033[0m'
 
 print_error() {
-    echo -e "${LIGHT_GRAY}(pre-commit)${COLOR_OFF} ${LIGHT_RED}error${COLOR_OFF}: $1"
+    echo -e "${LIGHT_GRAY}(prepare-commit-msg)${COLOR_OFF} ${LIGHT_RED}error${COLOR_OFF}: $1"
 }
 
 if ! command -v cargo >/dev/null 2>&1; then
