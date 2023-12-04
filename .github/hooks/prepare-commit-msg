@@ -14,32 +14,32 @@ prefixes=(
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
-LIGHT_GRAY='\033[0;37m'
+DARK_GRAY='\033[0;30m'
 LIGHT_RED='\033[1;31m'
 ITALIC='\033[3m'
 COLOR_OFF='\033[0m'
 
 print_error() {
-    echo -e "${LIGHT_GRAY}(prepare-commit-msg)${COLOR_OFF} ${LIGHT_RED}error${COLOR_OFF}: $1"
+    echo -e "${DARK_GRAY}(prepare-commit-msg)${COLOR_OFF} ${LIGHT_RED}error:${COLOR_OFF} $1"
 }
 
 if ! command -v cargo >/dev/null 2>&1; then
-    print_error "cargo is not installed"
+    print_error "cargo is not installed. It is required in order to run tests and formatting"
     exit 1
 fi
 
 # Current commit message exists in a file, the name of the file is passed as the `$1` argument
 commit_message=$(head -n1 $1)
 
-fail() {
+print_commit_fail() {
     print_error "invalid commit message: \"${RED}$commit_message${COLOR_OFF}\": $1"
 }
 
 validate_commit_message() {
-    # We want the upper limit of the commit title length to be 72,
-    # because that's the longest it can be without being ellipsied on the website
-    if ((${#commit_message} > 72)); then
-        fail "message too long (${#commit_message} > 72)"
+    local visible_message_limit=72;
+
+    if ((${#commit_message} > $visible_message_limit)); then
+        print_commit_fail "message too long (${#commit_message} > ${visible_message_limit})"
         exit 1
     fi
 
@@ -58,8 +58,8 @@ validate_commit_message() {
         fi
     done
 
-    fail "invalid commit message"
-    print_error "valid message is either a merge message, or has valid type (e.g. \"${GREEN}fix: ...${COLOR_OFF}\" or \"${GREEN}feat(filter): ...${COLOR_OFF}\")"
+    print_commit_fail "message does not follow constraints"
+    print_error "a valid message must be either a merge message, or have a valid prefix (e.g. \"${GREEN}fix: ...${COLOR_OFF}\" or \"${GREEN}feat(filter): ...${COLOR_OFF}\")"
     exit 1
 }
 
