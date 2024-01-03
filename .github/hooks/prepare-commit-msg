@@ -13,33 +13,58 @@ prefixes=(
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-CYAN='\033[0;36m'
-DARK_GRAY='\033[0;30m'
+CYAN='\033[1;34m'
+GRAY='\033[0;37m'
 LIGHT_RED='\033[1;31m'
 ITALIC='\033[3m'
 COLOR_OFF='\033[0m'
 
-print_error() {
-    echo -e "${DARK_GRAY}(prepare-commit-msg)${COLOR_OFF} ${LIGHT_RED}error:${COLOR_OFF} $1"
+get_environment() {
+    if [[ -n "$GIT_AUTHOR_NAME" ]]; then
+        echo "git"
+    else
+        echo "manual"
+    fi
+}
+
+get_commit_message() {
+    if [[ $(get_environment) == "git" ]]; then
+        commit_message_file=$1
+        commit_message=$(head -n1 "$commit_message_file")
+
+        echo $commit_message
+    else
+        echo "$1"
+    fi
+}
+
+if [[ $(get_environment) == "manual" ]]; then
+    if [ "$#" -ne 1 ]; then
+        echo "Usage: $0 <message>"
+        exit 1
+    fi
+fi
+
+commit_message=$(get_commit_message "$1" "$2")
+
+print_generic_error() {
+    echo -e "${CYAN}(prepare-commit-msg)${COLOR_OFF} ${LIGHT_RED}error:${COLOR_OFF} $1"
+}
+
+print_error_with_message() {
+    print_generic_error "invalid commit message \"${RED}$commit_message${COLOR_OFF}\": $1"
 }
 
 if ! command -v cargo >/dev/null 2>&1; then
-    print_error "cargo is not installed. It is required in order to run tests and formatting"
+    print_generic_error "cargo is not installed. It is required in order to run tests and format"
     exit 1
 fi
 
-# Current commit message exists in a file, the name of the file is passed as the `$1` argument
-commit_message=$(head -n1 $1)
-
-print_commit_fail() {
-    print_error "invalid commit message: \"${RED}$commit_message${COLOR_OFF}\": $1"
-}
-
 validate_commit_message() {
-    local visible_message_limit=72;
+    local visible_message_limit=72
 
     if ((${#commit_message} > $visible_message_limit)); then
-        print_commit_fail "message too long (${#commit_message} > ${visible_message_limit})"
+        print_error_with_message "message too long (${#commit_message} > ${visible_message_limit})"
         exit 1
     fi
 
@@ -58,8 +83,8 @@ validate_commit_message() {
         fi
     done
 
-    print_commit_fail "message does not follow constraints"
-    print_error "a valid message must be either a merge message, or have a valid prefix (e.g. \"${GREEN}fix: ...${COLOR_OFF}\" or \"${GREEN}feat(filter): ...${COLOR_OFF}\")"
+    print_error_with_message "message does not follow constraints"
+    print_generic_error "a valid message must be either a merge message, or have a valid prefix (e.g. \"${GREEN}fix: ...${COLOR_OFF}\" or \"${GREEN}feat(filter): ...${COLOR_OFF}\")"
     exit 1
 }
 
