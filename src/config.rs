@@ -8,6 +8,8 @@ use std::{
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
 
+const DEFAULT_TOR_ADDR: &str = "127.0.0.1:9050";
+
 #[derive(Debug, Serialize, Deserialize, EnumIter)]
 pub enum Mode {
     Standard,
@@ -25,17 +27,13 @@ impl Mode {
     }
 }
 
-impl From<&str> for Mode {
-    fn from(input: &str) -> Mode {
-        for resolver in Mode::iter() {
-            let resolver_value = resolver.ip_address();
+impl TryFrom<&str> for Mode {
+    type Error = String;
 
-            if input == resolver_value {
-                return resolver;
-            }
-        }
-
-        panic!("Invalid mode `{}`", input);
+    fn try_from(input: &str) -> Result<Self, Self::Error> {
+        Mode::iter()
+            .find(|mode| mode.ip_address() == input)
+            .ok_or_else(|| format!("Invalid mode `{}`", input))
     }
 }
 
@@ -46,12 +44,8 @@ pub struct TorConfig {
 }
 
 impl TorConfig {
-    pub fn default_address() -> String {
-        "127.0.0.1:9050".to_string()
-    }
-
     pub fn get_address(&self) -> String {
-        self.address.clone().unwrap_or(Self::default_address())
+        self.address.clone().unwrap_or(DEFAULT_TOR_ADDR.to_string())
     }
 }
 
@@ -62,14 +56,14 @@ pub struct SwiftConfig {
     pub tor: TorConfig,
 }
 
-impl std::default::Default for SwiftConfig {
+impl Default for SwiftConfig {
     fn default() -> Self {
         Self {
             mode: Mode::Standard,
             address: "127.0.0.1:53".parse().unwrap(),
             tor: TorConfig {
                 enabled: false,
-                address: Some(TorConfig::default_address()),
+                address: Some(DEFAULT_TOR_ADDR.to_string()),
             },
         }
     }

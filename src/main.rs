@@ -15,6 +15,8 @@ mod filter;
 mod http;
 mod listener;
 
+// TODO: make sure listener is local unless global listener is explicitly enabled
+
 #[tokio::main]
 async fn main() {
     cli::parse_args().await;

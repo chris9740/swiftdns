@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::Result;
-use dns_message_parser::{Dns, RCode};
+use dns_message_parser::{RCode, Dns};
 
 use crate::{
     cache::Cache,
@@ -18,19 +18,6 @@ use crate::{
     filter,
     http::client::Client,
 };
-
-macro_rules! ok_or_rcode {
-    ($result:expr, mut $query:expr, $rcode:expr) => {
-        match $result {
-            Ok(val) => val,
-            Err(_) => {
-                $query.flags.rcode = $rcode;
-
-                return Ok(());
-            }
-        }
-    };
-}
 
 async fn handle_query(
     query: &mut Dns,
@@ -85,6 +72,11 @@ async fn handle_query(
         }
 
         query.answers = dns::group_answers(&response.answer);
+        query.authorities = if let Some(authority) = response.authority {
+            dns::group_answers(&authority)
+        } else {
+            vec![]
+        };
     } else {
         query.flags.rcode = RCode::NXDomain;
     }
@@ -114,6 +106,7 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
     loop {
         let mut buf = [0; 512];
         let (amt, src) = socket.recv_from(&mut buf)?;
+        println!("Got connection! {src:#?}");
 
         match dns::decode(&buf[..amt]) {
             Ok(mut query) => {

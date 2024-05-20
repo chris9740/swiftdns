@@ -84,7 +84,7 @@ pub async fn parse_args() {
                     let end_time = Local::now().time();
                     let total_time = end_time - start_time;
 
-                    let output = response.display(&record_type).unwrap_or("Error: Could not render response".to_string());
+                    let output = response.display().unwrap_or("Error: Could not render response".to_string());
 
                     let records_len = response.answer.len();
                     let ms = total_time.num_milliseconds();

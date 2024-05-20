@@ -1,5 +1,15 @@
-use std::{error::Error, fmt::Display, str::FromStr, io::Write};
 use colored::Colorize;
+use dns_message_parser::{
+    rr::{self, Class, RR},
+    DomainName,
+};
+use std::{
+    error::Error,
+    fmt::Display,
+    io::Write,
+    net::{Ipv4Addr, Ipv6Addr},
+    str::FromStr,
+};
 use strum::{EnumIter, IntoEnumIterator};
 use tabwriter::TabWriter;
 
@@ -10,6 +20,11 @@ use crate::{config, http};
 pub enum RecordType {
     A,
     AAAA,
+    CNAME,
+    MX,
+    NS,
+    SRV,
+    SOA,
 }
 
 impl RecordType {
@@ -17,6 +32,116 @@ impl RecordType {
         match self {
             RecordType::A => 1,
             RecordType::AAAA => 28,
+            RecordType::CNAME => 5,
+            RecordType::MX => 15,
+            RecordType::NS => 2,
+            RecordType::SRV => 33,
+            RecordType::SOA => 6,
+        }
+    }
+
+    pub fn from_u16(value: u16) -> Option<Self> {
+        RecordType::iter().find(|r| r.value() == value)
+    }
+
+    pub fn construct_rr(&self, answer: &DnsAnswer) -> Result<RR, Box<dyn Error>> {
+        let domain_name: DomainName = answer.domain_name.parse()?;
+        let ttl = answer.ttl;
+        let class = Class::IN;
+        let data = answer.data.clone(); // TODO: remove need for .clone() somehow (im tired rn)
+
+        match self {
+            RecordType::A => {
+                let ipv4_addr = data.parse::<Ipv4Addr>()?;
+                Ok(RR::A(rr::A {
+                    domain_name,
+                    ttl,
+                    ipv4_addr,
+                }))
+            }
+            RecordType::AAAA => {
+                let ipv6_addr = data.parse::<Ipv6Addr>()?;
+                Ok(RR::AAAA(rr::AAAA {
+                    domain_name,
+                    ttl,
+                    ipv6_addr,
+                }))
+            }
+            RecordType::CNAME => {
+                let c_name = data.parse::<DomainName>()?;
+                Ok(RR::CNAME(rr::CNAME {
+                    domain_name,
+                    ttl,
+                    class: Class::IN,
+                    c_name,
+                }))
+            }
+            RecordType::MX => {
+                let priority_and_domain = data.splitn(2, ' ').collect::<Vec<&str>>();
+                let priority = priority_and_domain[0].parse::<u16>()?;
+                let exchange = priority_and_domain[1].parse::<DomainName>()?;
+
+                Ok(RR::MX(rr::MX {
+                    domain_name,
+                    ttl,
+                    class: Class::IN,
+                    preference: priority,
+                    exchange,
+                }))
+            }
+            RecordType::NS => {
+                let ns_d_name = data.parse::<DomainName>()?;
+
+                Ok(RR::NS(rr::NS {
+                    domain_name,
+                    ttl,
+                    class: Class::IN,
+                    ns_d_name,
+                }))
+            }
+            RecordType::SRV => {
+                let parts = data.split_whitespace().collect::<Vec<&str>>();
+                let priority = parts[0].parse::<u16>()?;
+                let weight = parts[1].parse::<u16>()?;
+                let port = parts[2].parse::<u16>()?;
+                let target = parts[3].parse::<DomainName>()?;
+                Ok(RR::SRV(rr::SRV {
+                    domain_name,
+                    ttl,
+                    class,
+                    priority,
+                    weight,
+                    port,
+                    target,
+                }))
+            }
+            RecordType::SOA => {
+                let parts: Vec<&str> = data.split_whitespace().collect();
+                if parts.len() < 7 {
+                    return Err("Insufficient data for SOA record".into());
+                }
+
+                let m_name = DomainName::from_str(parts[0])?;
+                let r_name = DomainName::from_str(parts[1])?;
+                let serial: u32 = parts[2].parse()?;
+                let refresh: u32 = parts[3].parse()?;
+                let retry: u32 = parts[4].parse()?;
+                let expire: u32 = parts[5].parse()?;
+                let min_ttl: u32 = parts[6].parse()?;
+
+                Ok(RR::SOA(rr::SOA {
+                    domain_name,
+                    ttl,
+                    class,
+                    m_name,
+                    r_name,
+                    serial,
+                    refresh,
+                    retry,
+                    expire,
+                    min_ttl,
+                }))
+            }
         }
     }
 }
@@ -26,6 +151,11 @@ impl Display for RecordType {
         let str = match self {
             RecordType::A => "A",
             RecordType::AAAA => "AAAA",
+            RecordType::CNAME => "CNAME",
+            RecordType::MX => "MX",
+            RecordType::NS => "NS",
+            RecordType::SRV => "SRV",
+            RecordType::SOA => "SOA",
         };
 
         f.write_str(str)
@@ -36,16 +166,10 @@ impl FromStr for RecordType {
     type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        for record_type in RecordType::iter() {
-            let input = s.to_lowercase();
-            let record_type_value = record_type.to_string().to_lowercase();
-
-            if input == record_type_value {
-                return Ok(record_type);
-            }
-        }
-
-        Err("Invalid record type")
+        let input = s.to_lowercase();
+        RecordType::iter()
+            .find(|rt| rt.to_string().to_lowercase() == input)
+            .ok_or("Invalid record type")
     }
 }
 
@@ -78,20 +202,29 @@ pub struct DnsResponse {
 }
 
 impl DnsResponse {
-    pub fn display(&self, record_type: &RecordType) -> Result<String, Box<dyn Error>> {
+    pub fn display(&self) -> Result<String, Box<dyn Error>> {
         let mut tw = TabWriter::new(vec![]);
         let header = vec!["domain", "type", "ttl", "data"];
 
-        let records: String = self.answer
+        let records: String = self
+            .answer
             .clone()
             .into_iter()
             .map(|record| {
+                let record_type = match RecordType::from_u16(record.r#type) {
+                    Some(r_type) => {
+                        format!("{} ({})", r_type.to_string(), r_type.value())
+                    }
+                    None => "".to_string(),
+                };
+
                 vec![
                     idna::domain_to_unicode(&record.domain_name).0,
-                    format!("{} ({})", record_type.to_string(), record_type.value()),
+                    record_type,
                     format!("{} secs", record.ttl),
-                    record.data
-                ].join("\t")
+                    record.data,
+                ]
+                .join("\t")
             })
             .collect::<Vec<String>>()
             .join("\n");

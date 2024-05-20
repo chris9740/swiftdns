@@ -1,9 +1,4 @@
-use std::net::{Ipv4Addr, Ipv6Addr};
-
-use dns_message_parser::{
-    rr::{self, RR},
-    DecodeError, Dns, DomainName, Flags, EncodeError,
-};
+use dns_message_parser::{rr::RR, DecodeError, Dns, EncodeError, Flags};
 
 use self::resolver::{DnsAnswer, RecordType};
 
@@ -15,13 +10,13 @@ pub fn encode(query: Dns) -> Result<bytes::BytesMut, EncodeError> {
         flags: Flags {
             qr: true,
             opcode: query.flags.opcode,
-            aa: true,
-            tc: query.flags.tc,
-            rd: query.flags.rd,
-            ra: true,
-            ad: true,
-            cd: query.flags.cd,
-            rcode: query.flags.rcode,
+            aa: false,
+            tc: query.flags.tc,       // echo this from CF
+            rd: query.flags.rd,       // reflect query
+            ra: true,                 // reflect CF
+            ad: true,                 // reflect CF
+            cd: query.flags.cd,       // reflect query
+            rcode: query.flags.rcode, // reflect CF
         },
         additionals: query.additionals,
         authorities: query.authorities,
@@ -40,18 +35,13 @@ pub fn group_answers(answers: &Vec<DnsAnswer>) -> Vec<RR> {
     let mut group = Vec::new();
 
     for answer in answers {
-        if answer.r#type == RecordType::A.value() {
-            group.push(RR::A(rr::A {
-                domain_name: answer.domain_name.parse::<DomainName>().unwrap(),
-                ttl: answer.ttl,
-                ipv4_addr: answer.data.parse::<Ipv4Addr>().unwrap(),
-            }));
-        } else if answer.r#type == RecordType::AAAA.value() {
-            group.push(RR::AAAA(rr::AAAA {
-                domain_name: answer.domain_name.parse::<DomainName>().unwrap(),
-                ttl: answer.ttl,
-                ipv6_addr: answer.data.parse::<Ipv6Addr>().unwrap(),
-            }));
+        match RecordType::from_u16(answer.r#type) {
+            Some(record_type) => {
+                if let Ok(rr) = record_type.construct_rr(answer) {
+                    group.push(rr);
+                }
+            }
+            None => continue,
         }
     }
 
