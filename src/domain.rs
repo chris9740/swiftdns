@@ -2,8 +2,9 @@ use std::{fmt::Display, str::FromStr};
 
 use anyhow::Result;
 use idna::Errors;
+use serde::Deserialize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Domain(String);
 
 impl FromStr for Domain {
@@ -133,6 +134,10 @@ impl Domain {
 
     pub fn name(&self) -> &str {
         &self.0
+    }
+
+    pub fn to_unicode(&self) -> String {
+        idna::domain_to_unicode(&self.name()).0
     }
 }
 

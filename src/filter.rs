@@ -1,5 +1,8 @@
 use std::{
-    fs::{self, File}, io::{BufRead, BufReader}, marker::PhantomData, path::PathBuf
+    fs::{self, File},
+    io::{BufRead, BufReader},
+    marker::PhantomData,
+    path::PathBuf,
 };
 
 use anyhow::Result;
@@ -34,9 +37,9 @@ pub struct Whitelist;
 pub struct Blacklist;
 
 impl FilterEntry<Blacklist> {
-    pub fn format_message(&self, domain: &Domain) -> String {
+    pub fn format_log_message(&self, domain: &Domain) -> String {
         format!(
-            "the domain `{}` has been blacklisted (pattern `{}`, {}:{}), refusing to resolve.",
+            "{} has been blacklisted (pattern `{}`, {}:{}), refusing.",
             domain.name(),
             self.pattern,
             self.file,
@@ -45,7 +48,7 @@ impl FilterEntry<Blacklist> {
     }
 }
 
-pub fn get_filters() -> Result<Vec<Filter>> {
+fn get_filters() -> Result<Vec<Filter>> {
     use crate::config;
 
     let directory_path = config::config_location().join("filters");
@@ -153,7 +156,7 @@ fn enumerate<T>(path: &PathBuf, name: &str) -> Option<FilterEntry<T>> {
                     file: filename,
                     pattern: pattern.to_string(),
                     line: line_number,
-                    _marker: PhantomData
+                    _marker: PhantomData,
                 });
             }
         }
@@ -163,7 +166,7 @@ fn enumerate<T>(path: &PathBuf, name: &str) -> Option<FilterEntry<T>> {
                 file: filename,
                 pattern: pattern.to_string(),
                 line: line_number,
-                _marker: PhantomData
+                _marker: PhantomData,
             });
         }
     }

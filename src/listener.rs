@@ -22,6 +22,7 @@ use crate::{
 async fn handle_query(
     query: &Dns,
     client: &mut Client,
+    config: &SwiftConfig,
     cache: &mut Cache,
 ) -> Result<Dns, Box<dyn Error>> {
     let mut response = query.clone();
@@ -51,7 +52,7 @@ async fn handle_query(
     );
 
     if let Some(entry) = filter::blacklist::find(domain.name()) {
-        println!("{}", entry.format_message(&domain));
+        println!("{}", entry.format_log_message(&domain));
 
         response.flags.rcode = RCode::Refused;
 
@@ -68,19 +69,18 @@ async fn handle_query(
     let api_response = if let Some(cached) = cached.clone() {
         cached.response
     } else {
-        dns::resolver::resolve(client, domain.name(), &record_type).await?
+        dns::resolver::resolve(client, config, domain.name(), &record_type).await?
     };
 
     if !api_response.answer.is_empty() {
         if cached.is_none() {
-            cache.set(question.clone(), &api_response);
+            cache.set(question.clone(), api_response.clone());
         }
 
         response.answers = dns::map_answers(&api_response.answer);
-        response.authorities = api_response.authority.map_or(vec![], |authority| {
-            dns::map_answers(&authority)
-        });
-        
+        response.authorities = api_response
+            .authority
+            .map_or(vec![], |authority| dns::map_answers(&authority));
 
         response.flags = Flags {
             qr: true,
@@ -100,7 +100,7 @@ async fn handle_query(
 }
 
 pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
-    let mut client = Client::create(config);
+    let mut client = Client::create(config)?;
     let mut cache = Cache::new();
 
     // TODO: make sure listener is local unless global listener is explicitly enabled
@@ -124,7 +124,7 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
         let (amt, src) = socket.recv_from(&mut buf)?;
 
         match dns::decode(&buf[..amt]) {
-            Ok(query) => match handle_query(&query, &mut client, &mut cache).await {
+            Ok(query) => match handle_query(&query, &mut client, &config, &mut cache).await {
                 Ok(response) => {
                     socket.send_to(&dns::encode(response)?, src)?;
                 }

@@ -4,6 +4,7 @@ use crate::{
     domain::Domain,
     filter, http, listener,
 };
+use anyhow::Result;
 use clap::{crate_description, crate_version, ArgAction, Parser, Subcommand};
 use std::{net::SocketAddr, time::Instant};
 
@@ -46,54 +47,47 @@ enum Commands {
             value_parser = clap::value_parser!(QueryType),
             default_value_t = QueryType::A
         )]
-        query_type: QueryType,
+        qtype: QueryType,
         #[arg(long = "tor", help = "Route through Tor", action = ArgAction::SetTrue)]
         tor: bool,
     },
 }
 
-pub async fn start() {
+pub async fn start() -> Result<()> {
     let args = Cli::parse();
 
-    let mut config = config::get_config().unwrap_or_else(|err| {
-        error!("Error while loading config: {}", err);
-    });
+    let mut config = config::get_config()?;
 
     match args.command {
         Commands::Start { address } => {
             let addr = address.unwrap_or(config.address);
 
-            if let Err(err) = listener::start(&addr, &config).await {
-                eprintln!("Error: {}", err);
-            }
+            listener::start(&addr, &config).await
         }
-        Commands::Resolve {
-            domain,
-            query_type,
-            tor,
-        } => {
+        Commands::Resolve { domain, qtype, tor } => {
             if tor {
                 config.tor.enabled = true;
             }
 
             let name = domain.name();
-            let mut http_client = http::Client::create(&config);
+            let mut client = http::Client::create(&config)?;
 
             if let Some(entry) = filter::blacklist::find(name) {
-                println!("{}", entry.format_message(&domain));
-                return;
+                println!("{}", entry.format_log_message(&domain));
+                return Ok(());
             }
 
-            let time_before_resolve = Instant::now();
+            let query_start_time = Instant::now();
 
-            match dns::resolver::resolve(&mut http_client, name, &query_type).await {
-                Ok(response) => {
+            dns::resolver::resolve(&mut client, &config, name, &qtype)
+                .await
+                .map(|response| {
                     if response.answer.is_empty() {
                         println!("No records found for {}", name);
                         return;
                     }
 
-                    let elapsed = time_before_resolve.elapsed().as_millis();
+                    let elapsed = query_start_time.elapsed().as_millis();
 
                     let output = response
                         .format_output()
@@ -112,11 +106,7 @@ pub async fn start() {
                             "records"
                         }
                     );
-                }
-                Err(err) => {
-                    error!("Error, could not resolve domain: {}", err);
-                }
-            }
+                })
         }
-    };
+    }
 }

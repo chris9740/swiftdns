@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 
+use anyhow::Result;
 use reqwest::{IntoUrl, RequestBuilder};
 
 use crate::config::SwiftConfig;
@@ -15,9 +16,9 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn create(config: &SwiftConfig) -> Self {
+    pub fn create(config: &SwiftConfig) -> Result<Self> {
         let client = if config.tor.enabled {
-            let tor_address: SocketAddr = config.tor.get_address().expect("Failed to parse Tor proxy address");
+            let tor_address: SocketAddr = config.tor.get_address()?;
 
             let proxy = tor::proxy::create(tor_address);
 
@@ -29,14 +30,14 @@ impl Client {
             reqwest::Client::new()
         };
 
-        Client {
+        Ok(Client {
             client,
             state: if config.tor.enabled {
                 ClientState::NeedsValidation
             } else {
                 ClientState::Ready
             },
-        }
+        })
     }
 
     pub async fn get<U>(&mut self, url: U) -> RequestBuilder

@@ -1,13 +1,16 @@
+pub mod error;
+
 use std::{
     env,
-    error::Error,
     net::SocketAddr,
     path::{Path, PathBuf},
 };
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use strum::{EnumIter, IntoEnumIterator};
+use strum::EnumIter;
+
+use self::error::ConfigError;
 
 const DEFAULT_TOR_ADDR: &str = "127.0.0.1:9050";
 
@@ -28,16 +31,6 @@ impl Mode {
     }
 }
 
-impl TryFrom<&str> for Mode {
-    type Error = String;
-
-    fn try_from(input: &str) -> Result<Self, Self::Error> {
-        Mode::iter()
-            .find(|mode| mode.ip_address() == input)
-            .ok_or_else(|| format!("Invalid mode `{}`", input))
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TorConfig {
     pub enabled: bool,
@@ -45,12 +38,12 @@ pub struct TorConfig {
 }
 
 impl TorConfig {
-    pub fn get_address(&self) -> Result<SocketAddr> {
+    pub fn get_address(&self) -> Result<SocketAddr, ConfigError> {
         let default_addr: SocketAddr = DEFAULT_TOR_ADDR.parse()?;
 
         let addr: SocketAddr = match &self.address {
             Some(addr_str) => addr_str.parse()?,
-            None => default_addr
+            None => default_addr,
         };
 
         Ok(addr)
@@ -77,19 +70,17 @@ impl Default for SwiftConfig {
     }
 }
 
-pub fn get_config() -> Result<SwiftConfig, Box<dyn Error>> {
+pub fn get_config() -> Result<SwiftConfig, ConfigError> {
     let config_path = config_location().join("config.toml");
-    let config: SwiftConfig = confy::load_path(config_path)?;
-
-    Ok(config)
+    confy::load_path::<SwiftConfig>(config_path).map_err(ConfigError::from)
 }
 
 pub fn config_location() -> PathBuf {
     if cfg!(debug_assertions) {
-        return env::current_dir()
-            .expect("Directory should exist")
-            .join("assets/");
+        env::current_dir()
+            .unwrap_or_else(|_| error!("Current directory inaccessible"))
+            .join("assets/")
+    } else {
+        Path::new("/etc/swiftdns/").to_path_buf()
     }
-
-    Path::new("/etc/swiftdns/").to_path_buf()
 }

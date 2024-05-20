@@ -6,7 +6,7 @@ use crate::dns::resolver::{DnsQuestion, DnsResponse};
 
 #[derive(Clone)]
 pub struct CacheEntry {
-    pub valid_until: DateTime<Local>,
+    pub expires_at: DateTime<Local>,
     pub response: DnsResponse,
 }
 
@@ -27,18 +27,20 @@ impl Cache {
         Cache { hash_map }
     }
 
-    pub fn set(&mut self, question: DnsQuestion, response: &DnsResponse) {
-        let response = response.clone();
+    pub fn set(&mut self, question: DnsQuestion, response: DnsResponse) {
+        let ttl = response
+            .answer
+            .iter()
+            .map(|a| a.ttl)
+            .filter(|&t| t > 0)
+            .min();
 
-        // We will assume that the TTL for the first record will be the same for all records in this response.
-        // This might not always be the case, but it's uncommon for them to differ.
-        if let Some(first_answer) = response.answer.first() {
-            let ttl_seconds = first_answer.ttl;
-            let valid_until = Local::now() + Duration::seconds(ttl_seconds.into());
+        if let Some(ttl) = ttl {
+            let expires_at = Local::now() + Duration::seconds(ttl as i64);
 
             let entry = CacheEntry {
                 response,
-                valid_until,
+                expires_at,
             };
 
             self.hash_map.insert(question, entry);
@@ -46,16 +48,12 @@ impl Cache {
     }
 
     pub fn get(&mut self, question: &DnsQuestion) -> Option<CacheEntry> {
-        if let Some(entry) = self.hash_map.get(question) {
-            if entry.valid_until < Local::now() {
+        self.hash_map.get(question)
+            .filter(|entry| entry.expires_at > Local::now())
+            .cloned()
+            .or_else(|| {
                 self.hash_map.remove(question);
-
-                return None;
-            }
-
-            return Some(entry.clone());
-        }
-
-        None
-    }
+                None
+            })
+    }    
 }

@@ -1,6 +1,7 @@
+use anyhow::Result;
 use swiftdns::cli;
 
 #[tokio::main]
-async fn main() {
-    cli::start().await;
+async fn main() -> Result<()> {
+    cli::start().await
 }

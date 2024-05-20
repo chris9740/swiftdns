@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use colored::Colorize;
 use dns_message_parser::{
-    rr::{self, Class, NonEmptyVec, RR},
+    rr::{self, Class, RR},
     DomainName,
 };
 use serde::Deserialize;
@@ -15,7 +15,7 @@ use std::{
 use strum::{EnumIter, IntoEnumIterator};
 use tabwriter::TabWriter;
 
-use crate::{config, http};
+use crate::{config::SwiftConfig, domain::Domain, http};
 
 #[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq)]
 #[allow(clippy::upper_case_acronyms)]
@@ -47,7 +47,7 @@ impl RecordType {
     }
 
     pub fn construct_rr(&self, answer: &DnsAnswer) -> Result<RR, Box<dyn Error>> {
-        let domain_name: DomainName = answer.name.parse()?;
+        let domain_name: DomainName = answer.name.name().parse()?;
         let ttl = answer.ttl;
         let class = Class::IN;
         let data = &answer.data;
@@ -170,92 +170,6 @@ impl QueryType {
     pub fn from_u16(value: u16) -> Option<Self> {
         Self::iter().find(|r| r.value() == value)
     }
-
-    pub fn construct_rr(&self, answer: &DnsAnswer) -> Result<RR> {
-        let domain_name: DomainName = answer.name.parse()?;
-        let ttl = answer.ttl;
-        let class = Class::IN;
-        let data = answer.data.clone(); // TODO: remove need for .clone() somehow (im tired rn)
-
-        match self {
-            Self::A => {
-                let ipv4_addr = data.parse::<Ipv4Addr>()?;
-                Ok(RR::A(rr::A {
-                    domain_name,
-                    ttl,
-                    ipv4_addr,
-                }))
-            }
-            Self::AAAA => {
-                let ipv6_addr = data.parse::<Ipv6Addr>()?;
-                Ok(RR::AAAA(rr::AAAA {
-                    domain_name,
-                    ttl,
-                    ipv6_addr,
-                }))
-            }
-            Self::CNAME => {
-                let c_name = data.parse::<DomainName>()?;
-                Ok(RR::CNAME(rr::CNAME {
-                    domain_name,
-                    ttl,
-                    class: Class::IN,
-                    c_name,
-                }))
-            }
-            Self::TXT => {
-                let strings: Vec<String> = data.split_whitespace().map(|s| s.to_string()).collect();
-
-                Ok(RR::TXT(rr::TXT {
-                    domain_name,
-                    ttl,
-                    class: Class::IN,
-                    strings: NonEmptyVec::try_from(strings)
-                        .map_err(|_| anyhow!("Error in parsing TXT strings"))?,
-                }))
-            }
-            Self::MX => {
-                let priority_and_domain = data.splitn(2, ' ').collect::<Vec<&str>>();
-                let priority = priority_and_domain[0].parse::<u16>()?;
-                let exchange = priority_and_domain[1].parse::<DomainName>()?;
-
-                Ok(RR::MX(rr::MX {
-                    domain_name,
-                    ttl,
-                    class: Class::IN,
-                    preference: priority,
-                    exchange,
-                }))
-            }
-            Self::SOA => {
-                let parts: Vec<&str> = data.split_whitespace().collect();
-                if parts.len() < 7 {
-                    return Err(anyhow!("Insufficient data for SOA record"));
-                }
-
-                let m_name = DomainName::from_str(parts[0])?;
-                let r_name = DomainName::from_str(parts[1])?;
-                let serial: u32 = parts[2].parse()?;
-                let refresh: u32 = parts[3].parse()?;
-                let retry: u32 = parts[4].parse()?;
-                let expire: u32 = parts[5].parse()?;
-                let min_ttl: u32 = parts[6].parse()?;
-
-                Ok(RR::SOA(rr::SOA {
-                    domain_name,
-                    ttl,
-                    class,
-                    m_name,
-                    r_name,
-                    serial,
-                    refresh,
-                    retry,
-                    expire,
-                    min_ttl,
-                }))
-            }
-        }
-    }
 }
 
 impl FromStr for QueryType {
@@ -327,14 +241,14 @@ impl DnsResponse {
 
         for record in &self.answer {
             let record_type = RecordType::from_u16(record.rtype)
-                .map(|r| format!("{} ({})", r, r.value()))
                 .ok_or_else(|| anyhow!("Unknown record type"))?;
 
             writeln!(
                 tw,
-                "{}\t{}\t{}\t{}",
-                idna::domain_to_unicode(&record.name).0,
+                "{}\t{} ({})\t{}\t{}",
+                record.name.to_unicode(),
                 record_type,
+                record_type.value(),
                 record.ttl,
                 record.data
             )?;
@@ -357,7 +271,7 @@ impl DnsResponse {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct DnsAnswer {
-    pub name: String,
+    pub name: Domain,
     #[serde(rename = "type")]
     pub rtype: u16,
     #[serde(rename = "TTL")]
@@ -374,17 +288,17 @@ pub struct DnsQuestion {
 
 pub async fn resolve(
     client: &mut http::Client,
+    config: &SwiftConfig,
     name: &str,
-    query_type: &QueryType,
-) -> Result<DnsResponse, Box<dyn Error>> {
-    let config = config::get_config()?;
+    qtype: &QueryType,
+) -> Result<DnsResponse> {
     let resolver_ip = config.mode.ip_address();
 
     let url = format!(
         "https://{}/dns-query?name={}&type={}",
         resolver_ip,
         name,
-        &query_type.to_string()
+        &qtype.to_string()
     );
 
     let res = client
@@ -397,7 +311,7 @@ pub async fn resolve(
     let status = res.status();
 
     if status == reqwest::StatusCode::BAD_REQUEST {
-        return Err("Bad request".into());
+        return Err(anyhow!("Bad request"));
     }
 
     let dns_response = res.json::<DnsResponse>().await?;
