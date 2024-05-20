@@ -1,19 +1,16 @@
 # Swiftdns
 
-Swiftdns is a privacy-focused DNS client tailored for debian distributions.
+Swiftdns is a local forwarding DNS resolver tailored for debian distributions, with focus on user privacy.
 
 ## Project
 
-The Swiftdns client can currently resolve A and AAAA records (more will be supported later).
+Swiftdns enhances your browsing security by seamlessly integrating DNS over HTTPS (DoH) with your local system's existing UDP-based DNS queries. Unlike traditional DNS queries that are visible to ISPs, DoH encrypts your requests, ensuring that the domains you access remain confidential between you and Cloudflare. This setup allows you to take full advantage of Cloudflare's DoH without any complex configuration. Swiftdns operates quietly in the background, ensuring your DNS queries are both secure and private, with minimal configuration effort on your part.
 
-In the background, it uses Cloudflare's DOH (DNS over HTTPS) API to resolve the domains, and optionally routes through a tor proxy.
+For those seeking an extra layer of privacy, Swiftdns also offers the option to route queries through a Tor proxy.
 
 ## Notice
 
-At this moment, Swiftdns should not be considered stable.
-
-Swiftdns works well with most software, but Chromium doesn't always query the client, it occasionally errors with `ERR_NAME_NOT_RESOLVED` for some reason.
-This can cause Chromium to erroneously fail to resolve a domain. However, it will never accidentally resolve a blacklisted domain, assuming your computer is properly configured to use Swiftdns.
+Swiftdns is under active development, and as such, may exhibit occasional compatibility issues. Those issues are most prevalent in Chromium, where it might not always resolve domain names.
 
 ## Installing
 
@@ -89,7 +86,7 @@ The whitelist takes precedence over any blacklist file.
 
 ## Tor
 
-To achieve the most privacy possible, you can route your traffic through Tor. See [configuration](#configuration) (note that this can drastically increase the time it takes to query).
+To achieve the most privacy possible, you can route your traffic through Tor. See [configuration](#configuration). Do note that this can drastically increase the time it takes to query, sometimes in excess of 5 seconds; you probably won't need this feature.
 
 ## Configuration
 
@@ -107,6 +104,7 @@ In contrast to Swiftdns, Cloudflare blocks domains by "resolving" them with `0.0
 | tor     | -              | [TorConfig](#tor-configuration)    | Configuration options for Tor           |
 
 ### Tor Configuration
+
 | Key         | Default          | Value(s)                     | Description                              |
 | ----------- | ---------------- | ---------------------------- | ---------------------------------------- |
 | tor.enabled | `false`          | bool                         | Whether to route DNS queries through tor |
@@ -125,10 +123,10 @@ $ swiftdns start
 
 -   ### Resolve
 
-Resolve a domain in the terminal (specify type with `-t <type>`, default is `A`)
+Resolve a domain in the terminal
 
 ```bash
-$ swiftdns resolve <domain>
+$ swiftdns resolve <domain> [type: A]
 ```
 
 Of course, you can always run `swiftdns --help` to get more detailed documentation.

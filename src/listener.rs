@@ -5,89 +5,105 @@ use std::{
 };
 
 use anyhow::Result;
-use dns_message_parser::{RCode, Dns};
+use dns_message_parser::{Dns, Flags, RCode};
 
 use crate::{
     cache::Cache,
     config::SwiftConfig,
     dns::{
         self,
-        resolver::{DnsQuestion, RecordType},
+        resolver::{DnsQuestion, QueryType},
     },
     domain::Domain,
     filter,
-    http::client::Client,
+    http::Client,
 };
 
 async fn handle_query(
-    query: &mut Dns,
+    query: &Dns,
     client: &mut Client,
     cache: &mut Cache,
-) -> Result<(), Box<dyn Error>> {
-    // Multiple questions are *technically* allowed in the protocol, but rarely supported.
-    if query.questions.len() != 1 {
-        query.flags.rcode = RCode::FormErr;
+) -> Result<Dns, Box<dyn Error>> {
+    let mut response = query.clone();
 
-        return Ok(());
+    // RFC 1035 allows multiple questions per query for forward compatibility.
+    // This feature is not implemented or used in practice
+    // and poses security risks (DNS amplification).
+    // This implementation supports only single-question queries.
+    if query.questions.len() != 1 {
+        response.flags.rcode = RCode::FormErr;
+
+        return Ok(response);
     }
 
-    let question = query.questions.get(0).unwrap();
+    let question = query.questions.first().unwrap();
 
     let domain: Domain = ok_or_rcode!(
         question.domain_name.to_string().parse(),
-        mut query,
+        mut response,
         RCode::NXDomain
     );
 
-    let record_type: RecordType = ok_or_rcode!(
+    let record_type: QueryType = ok_or_rcode!(
         question.q_type.to_string().parse(),
-        mut query,
+        mut response,
         RCode::NotImp
     );
 
     if let Some(entry) = filter::blacklist::find(domain.name()) {
         println!("{}", entry.format_message(&domain));
 
-        query.flags.rcode = RCode::Refused;
+        response.flags.rcode = RCode::Refused;
 
-        return Ok(());
+        return Ok(response);
     }
 
     let question = DnsQuestion {
         name: domain.name().to_string(),
-        r#type: record_type.value(),
+        qtype: record_type.value(),
     };
 
     let cached = cache.get(&question);
 
-    let response = if let Some(cached) = cached.clone() {
+    let api_response = if let Some(cached) = cached.clone() {
         cached.response
     } else {
         dns::resolver::resolve(client, domain.name(), &record_type).await?
     };
 
-    if !response.answer.is_empty() {
+    if !api_response.answer.is_empty() {
         if cached.is_none() {
-            cache.set(question.clone(), &response);
+            cache.set(question.clone(), &api_response);
         }
 
-        query.answers = dns::group_answers(&response.answer);
-        query.authorities = if let Some(authority) = response.authority {
-            dns::group_answers(&authority)
-        } else {
-            vec![]
-        };
+        response.answers = dns::map_answers(&api_response.answer);
+        response.authorities = api_response.authority.map_or(vec![], |authority| {
+            dns::map_answers(&authority)
+        });
+        
+
+        response.flags = Flags {
+            qr: true,
+            aa: false,
+            tc: api_response.tc,
+            ra: api_response.ra,
+            ad: api_response.ad,
+            rcode: RCode::NoError,
+
+            ..query.flags
+        }
     } else {
-        query.flags.rcode = RCode::NXDomain;
+        response.flags.rcode = RCode::NXDomain;
     }
 
-    Ok(())
+    Ok(response)
 }
 
 pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
-    let mut client = Client::new(config).expect("Should be able to build client wrapper");
+    let mut client = Client::create(config);
     let mut cache = Cache::new();
 
+    // TODO: make sure listener is local unless global listener is explicitly enabled
     let socket = match UdpSocket::bind(addr) {
         Ok(socket) => socket,
         Err(err) => {
@@ -106,18 +122,17 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
     loop {
         let mut buf = [0; 512];
         let (amt, src) = socket.recv_from(&mut buf)?;
-        println!("Got connection! {src:#?}");
 
         match dns::decode(&buf[..amt]) {
-            Ok(mut query) => {
-                if let Err(why) = handle_query(&mut query, &mut client, &mut cache).await {
+            Ok(query) => match handle_query(&query, &mut client, &mut cache).await {
+                Ok(response) => {
+                    socket.send_to(&dns::encode(response)?, src)?;
+                }
+                Err(why) => {
                     eprintln!("There was an error while resolving: {}", why);
                     continue;
                 }
-
-                let encoded = dns::encode(query)?;
-                socket.send_to(&encoded, src)?;
-            }
+            },
             Err(err) => {
                 eprintln!("Error, received invalid query: {}", err);
             }

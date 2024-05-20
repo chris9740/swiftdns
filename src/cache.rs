@@ -14,6 +14,12 @@ pub struct Cache {
     hash_map: HashMap<DnsQuestion, CacheEntry>,
 }
 
+impl Default for Cache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Cache {
     pub fn new() -> Cache {
         let hash_map = HashMap::new();
@@ -26,10 +32,7 @@ impl Cache {
 
         // We will assume that the TTL for the first record will be the same for all records in this response.
         // This might not always be the case, but it's uncommon for them to differ.
-        //
-        // At worst, this will cause a second query to have to be made, which is not
-        // a problem worth spending time on.
-        if let Some(first_answer) = response.answer.get(0) {
+        if let Some(first_answer) = response.answer.first() {
             let ttl_seconds = first_answer.ttl;
             let valid_until = Local::now() + Duration::seconds(ttl_seconds.into());
 

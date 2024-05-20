@@ -1,7 +1,5 @@
 use std::{
-    fs::{self, File},
-    io::{BufRead, BufReader},
-    path::PathBuf,
+    fs::{self, File}, io::{BufRead, BufReader}, marker::PhantomData, path::PathBuf
 };
 
 use anyhow::Result;
@@ -20,13 +18,22 @@ pub struct Filter {
     pub filename: String,
 }
 
-pub struct FilterEntry {
+pub struct FilterEntry<T> {
     pub file: String,
     pub pattern: String,
     pub line: usize,
+    _marker: PhantomData<T>,
 }
 
-impl FilterEntry {
+pub enum FilterType {
+    Whitelist,
+    Blacklist,
+}
+
+pub struct Whitelist;
+pub struct Blacklist;
+
+impl FilterEntry<Blacklist> {
     pub fn format_message(&self, domain: &Domain) -> String {
         format!(
             "the domain `{}` has been blacklisted (pattern `{}`, {}:{}), refusing to resolve.",
@@ -62,7 +69,7 @@ pub fn get_filters() -> Result<Vec<Filter>> {
                 path,
                 pathname,
                 filename,
-                contents
+                contents,
             })
         })
         .collect();
@@ -74,9 +81,9 @@ pub mod whitelist {
 
     use crate::config;
 
-    use super::FilterEntry;
+    use super::{FilterEntry, Whitelist};
 
-    pub fn find(name: &str) -> Option<FilterEntry> {
+    pub fn find(name: &str) -> Option<FilterEntry<Whitelist>> {
         let whitelist_path = config::config_location().join("filters/whitelist.list");
         let exists = whitelist_path.try_exists().unwrap_or(false);
 
@@ -89,9 +96,9 @@ pub mod whitelist {
 }
 
 pub mod blacklist {
-    use super::FilterEntry;
+    use super::{Blacklist, FilterEntry};
 
-    pub fn find(name: &str) -> Option<FilterEntry> {
+    pub fn find(name: &str) -> Option<FilterEntry<Blacklist>> {
         if super::whitelist::find(name).is_some() {
             return None;
         }
@@ -115,7 +122,7 @@ pub mod blacklist {
 }
 
 /// Enumerates the file and matches patterns against the domain name
-fn enumerate(path: &PathBuf, name: &str) -> Option<FilterEntry> {
+fn enumerate<T>(path: &PathBuf, name: &str) -> Option<FilterEntry<T>> {
     let file = File::open(path).unwrap();
     let reader = BufReader::new(file);
 
@@ -146,6 +153,7 @@ fn enumerate(path: &PathBuf, name: &str) -> Option<FilterEntry> {
                     file: filename,
                     pattern: pattern.to_string(),
                     line: line_number,
+                    _marker: PhantomData
                 });
             }
         }
@@ -155,6 +163,7 @@ fn enumerate(path: &PathBuf, name: &str) -> Option<FilterEntry> {
                 file: filename,
                 pattern: pattern.to_string(),
                 line: line_number,
+                _marker: PhantomData
             });
         }
     }

@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
 
@@ -44,8 +45,15 @@ pub struct TorConfig {
 }
 
 impl TorConfig {
-    pub fn get_address(&self) -> String {
-        self.address.clone().unwrap_or(DEFAULT_TOR_ADDR.to_string())
+    pub fn get_address(&self) -> Result<SocketAddr> {
+        let default_addr: SocketAddr = DEFAULT_TOR_ADDR.parse()?;
+
+        let addr: SocketAddr = match &self.address {
+            Some(addr_str) => addr_str.parse()?,
+            None => default_addr
+        };
+
+        Ok(addr)
     }
 }
 

@@ -1,7 +1,11 @@
-use chrono::Local;
-use clap::{Parser, Subcommand, ArgAction, crate_description, crate_version};
-use crate::{Domain, RecordType, listener, filter, http, dns, config};
-use std::net::SocketAddr;
+use crate::{
+    config,
+    dns::{self, resolver::QueryType},
+    domain::Domain,
+    filter, http, listener,
+};
+use clap::{crate_description, crate_version, ArgAction, Parser, Subcommand};
+use std::{net::SocketAddr, time::Instant};
 
 #[derive(Parser)]
 #[command(
@@ -11,7 +15,7 @@ use std::net::SocketAddr;
 )]
 struct Cli {
     #[command(subcommand)]
-    command: Commands
+    command: Commands,
 }
 
 #[derive(Subcommand)]
@@ -24,7 +28,7 @@ enum Commands {
             short = 'a',
             value_parser = clap::value_parser!(SocketAddr)
         )]
-        address: Option<SocketAddr>
+        address: Option<SocketAddr>,
     },
     #[command(about = "Resolve a domain name")]
     Resolve {
@@ -35,14 +39,20 @@ enum Commands {
             value_parser = clap::value_parser!(Domain)
         )]
         domain: Domain,
-        #[arg(long = "type", short = 't', default_value = "A", value_parser = clap::value_parser!(RecordType))]
-        record_type: RecordType,
-        #[arg(long = "tor", help = "Use tor", action = ArgAction::SetTrue)]
+        #[arg(
+            name = "type",
+            help = "The type of record to query for",
+            required = false,
+            value_parser = clap::value_parser!(QueryType),
+            default_value_t = QueryType::A
+        )]
+        query_type: QueryType,
+        #[arg(long = "tor", help = "Route through Tor", action = ArgAction::SetTrue)]
         tor: bool,
-    }
+    },
 }
 
-pub async fn parse_args() {
+pub async fn start() {
     let args = Cli::parse();
 
     let mut config = config::get_config().unwrap_or_else(|err| {
@@ -51,47 +61,58 @@ pub async fn parse_args() {
 
     match args.command {
         Commands::Start { address } => {
-            let addr = address.unwrap_or({
-                config.address
-            });
+            let addr = address.unwrap_or(config.address);
 
             if let Err(err) = listener::start(&addr, &config).await {
                 eprintln!("Error: {}", err);
             }
-        },
-        Commands::Resolve { domain, record_type, tor } => {
+        }
+        Commands::Resolve {
+            domain,
+            query_type,
+            tor,
+        } => {
             if tor {
                 config.tor.enabled = true;
             }
 
-            let domain_name = domain.name();
-            let mut http_client = http::client::Client::new(&config).expect("Should be able to build client wrapper");
+            let name = domain.name();
+            let mut http_client = http::Client::create(&config);
 
-            if let Some(entry) = filter::blacklist::find(domain_name) {
+            if let Some(entry) = filter::blacklist::find(name) {
                 println!("{}", entry.format_message(&domain));
                 return;
             }
 
-            let start_time = Local::now().time();
+            let time_before_resolve = Instant::now();
 
-            match dns::resolver::resolve(&mut http_client, domain_name, &record_type).await {
+            match dns::resolver::resolve(&mut http_client, name, &query_type).await {
                 Ok(response) => {
                     if response.answer.is_empty() {
-                        println!("No records found for {}", domain_name);
+                        println!("No records found for {}", name);
                         return;
                     }
 
-                    let end_time = Local::now().time();
-                    let total_time = end_time - start_time;
+                    let elapsed = time_before_resolve.elapsed().as_millis();
 
-                    let output = response.display().unwrap_or("Error: Could not render response".to_string());
+                    let output = response
+                        .format_output()
+                        .unwrap_or("Error: Could not render response".to_string());
 
                     let records_len = response.answer.len();
-                    let ms = total_time.num_milliseconds();
 
+                    println!("Upstream DNS: Cloudflare ({})", config.mode.ip_address());
+                    println!();
                     println!("{output}");
-                    println!("\n({records_len} {} found, query time: {ms}ms)", if records_len == 1 { "record" } else { "records" });
-                },
+                    println!(
+                        "({records_len} {} found, query time: {elapsed}ms)",
+                        if records_len == 1 {
+                            "record"
+                        } else {
+                            "records"
+                        }
+                    );
+                }
                 Err(err) => {
                     error!("Error, could not resolve domain: {}", err);
                 }

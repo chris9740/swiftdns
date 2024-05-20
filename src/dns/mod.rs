@@ -1,6 +1,6 @@
 use dns_message_parser::{rr::RR, DecodeError, Dns, EncodeError, Flags};
 
-use self::resolver::{DnsAnswer, RecordType};
+use self::resolver::{DnsAnswer, QueryType};
 
 pub mod resolver;
 
@@ -31,11 +31,11 @@ pub fn decode(query_bytes: &[u8]) -> Result<Dns, DecodeError> {
     Dns::decode(bytes.into())
 }
 
-pub fn group_answers(answers: &Vec<DnsAnswer>) -> Vec<RR> {
+pub fn map_answers(answers: &Vec<DnsAnswer>) -> Vec<RR> {
     let mut group = Vec::new();
 
     for answer in answers {
-        match RecordType::from_u16(answer.r#type) {
+        match QueryType::from_u16(answer.rtype) {
             Some(record_type) => {
                 if let Ok(rr) = record_type.construct_rr(answer) {
                     group.push(rr);
