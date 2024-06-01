@@ -1,5 +1,6 @@
 # Configuration file used in development
 
+version = 2
 mode = "Standard"
 address = "127.0.0.1:5053"
 

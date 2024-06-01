@@ -1,17 +1,18 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Duration, Local};
+use dns_message_parser::question::Question;
 
-use crate::dns::resolver::{DnsQuestion, DnsResponse};
+use crate::dns::resolver::ApiResponse;
 
 #[derive(Clone)]
 pub struct CacheEntry {
     pub expires_at: DateTime<Local>,
-    pub response: DnsResponse,
+    pub response: ApiResponse,
 }
 
 pub struct Cache {
-    hash_map: HashMap<DnsQuestion, CacheEntry>,
+    hash_map: HashMap<Question, CacheEntry>,
 }
 
 impl Default for Cache {
@@ -27,7 +28,7 @@ impl Cache {
         Cache { hash_map }
     }
 
-    pub fn set(&mut self, question: DnsQuestion, response: DnsResponse) {
+    pub fn set(&mut self, question: Question, response: ApiResponse) {
         let ttl = response
             .answer
             .iter()
@@ -47,13 +48,14 @@ impl Cache {
         }
     }
 
-    pub fn get(&mut self, question: &DnsQuestion) -> Option<CacheEntry> {
-        self.hash_map.get(question)
+    pub fn get(&mut self, question: &Question) -> Option<CacheEntry> {
+        self.hash_map
+            .get(question)
             .filter(|entry| entry.expires_at > Local::now())
             .cloned()
             .or_else(|| {
                 self.hash_map.remove(question);
                 None
             })
-    }    
+    }
 }

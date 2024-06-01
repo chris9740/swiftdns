@@ -51,7 +51,25 @@ impl TorConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct SwiftConfigV1 {
+    pub mode: Mode,
+    pub address: SocketAddr,
+    pub tor: bool,
+}
+
+impl Default for SwiftConfigV1 {
+    fn default() -> Self {
+        Self {
+            mode: Mode::Standard,
+            address: "127.0.0.1:53".parse().unwrap(),
+            tor: false,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SwiftConfig {
+    pub version: u8,
     pub mode: Mode,
     pub address: SocketAddr,
     pub tor: TorConfig,
@@ -60,6 +78,7 @@ pub struct SwiftConfig {
 impl Default for SwiftConfig {
     fn default() -> Self {
         Self {
+            version: 2,
             mode: Mode::Standard,
             address: "127.0.0.1:53".parse().unwrap(),
             tor: TorConfig {
@@ -70,12 +89,34 @@ impl Default for SwiftConfig {
     }
 }
 
+impl From<SwiftConfigV1> for SwiftConfig {
+    fn from(old_config: SwiftConfigV1) -> Self {
+        Self {
+            version: 2,
+            mode: old_config.mode,
+            address: old_config.address,
+            tor: TorConfig {
+                enabled: old_config.tor,
+                address: None,
+            },
+        }
+    }
+}
+
 pub fn get_config() -> Result<SwiftConfig, ConfigError> {
-    let config_path = config_location().join("config.toml");
+    let config_path = get_config_path().join("config.toml");
+
+    if let Ok(old_config) = confy::load_path::<SwiftConfigV1>(&config_path) {
+        let new_config: SwiftConfig = old_config.into();
+        confy::store_path(&config_path, &new_config)?;
+
+        return Ok(new_config);
+    }
+
     confy::load_path::<SwiftConfig>(config_path).map_err(ConfigError::from)
 }
 
-pub fn config_location() -> PathBuf {
+pub fn get_config_path() -> PathBuf {
     if cfg!(debug_assertions) {
         env::current_dir()
             .unwrap_or_else(|_| error!("Current directory inaccessible"))

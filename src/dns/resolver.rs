@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use colored::Colorize;
 use dns_message_parser::{
+    question::Question,
     rr::{self, Class, RR},
     DomainName,
 };
@@ -46,7 +47,7 @@ impl RecordType {
         RecordType::iter().find(|r| r.value() == value)
     }
 
-    pub fn construct_rr(&self, answer: &DnsAnswer) -> Result<RR, Box<dyn Error>> {
+    pub fn construct_rr(&self, answer: &ApiAnswer) -> Result<RR, Box<dyn Error>> {
         let domain_name: DomainName = answer.name.name().parse()?;
         let ttl = answer.ttl;
         let class = Class::IN;
@@ -214,7 +215,7 @@ impl Display for RecordType {
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "PascalCase")]
-pub struct DnsResponse {
+pub struct ApiResponse {
     pub status: u8,
     #[serde(rename = "TC")]
     pub tc: bool,
@@ -226,13 +227,13 @@ pub struct DnsResponse {
     pub ad: bool,
     #[serde(rename = "CD")]
     pub cd: bool,
-    pub question: Option<Vec<DnsQuestion>>,
+    pub question: Option<Vec<ApiQuestion>>,
     #[serde(default)]
-    pub answer: Vec<DnsAnswer>,
-    pub authority: Option<Vec<DnsAnswer>>,
+    pub answer: Vec<ApiAnswer>,
+    pub authority: Option<Vec<ApiAnswer>>,
 }
 
-impl DnsResponse {
+impl ApiResponse {
     pub fn format_output(&self) -> Result<String> {
         let mut tw = TabWriter::new(vec![]);
         let headers = vec!["domain", "type", "ttl", "data"];
@@ -240,18 +241,14 @@ impl DnsResponse {
         writeln!(tw, "{}", headers.join("\t"))?;
 
         for record in &self.answer {
-            let record_type = RecordType::from_u16(record.rtype)
-                .ok_or_else(|| anyhow!("Unknown record type"))?;
+            let record_type =
+                RecordType::from_u16(record.rtype).ok_or_else(|| anyhow!("Unknown record type"))?;
 
-            writeln!(
-                tw,
-                "{}\t{} ({})\t{}\t{}",
-                record.name.to_unicode(),
-                record_type,
-                record_type.value(),
-                record.ttl,
-                record.data
-            )?;
+            write!(tw, "{}\t", record.name.to_unicode())?;
+            write!(tw, "{} ({})\t", record_type, record_type.value())?;
+            write!(tw, "{}\t", record.ttl)?;
+            write!(tw, "{}", record.data)?;
+            writeln!(tw, "")?;
         }
 
         tw.flush()?;
@@ -262,7 +259,7 @@ impl DnsResponse {
         let remaining: String = output_splitter.next().unwrap_or("").to_string();
 
         for item in headers {
-            header_line = header_line.replace(item, &item.on_bright_white().black().to_string());
+            header_line = header_line.replace(item, &item.on_truecolor(190, 190, 190).black().to_string());
         }
 
         Ok(format!("{header_line}\n{remaining}"))
@@ -270,7 +267,7 @@ impl DnsResponse {
 }
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct DnsAnswer {
+pub struct ApiAnswer {
     pub name: Domain,
     #[serde(rename = "type")]
     pub rtype: u16,
@@ -280,7 +277,7 @@ pub struct DnsAnswer {
 }
 
 #[derive(Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
-pub struct DnsQuestion {
+pub struct ApiQuestion {
     pub name: String,
     #[serde(rename = "type")]
     pub qtype: u16,
@@ -289,16 +286,13 @@ pub struct DnsQuestion {
 pub async fn resolve(
     client: &mut http::Client,
     config: &SwiftConfig,
-    name: &str,
-    qtype: &QueryType,
-) -> Result<DnsResponse> {
+    question: &Question,
+) -> Result<ApiResponse> {
     let resolver_ip = config.mode.ip_address();
 
     let url = format!(
         "https://{}/dns-query?name={}&type={}",
-        resolver_ip,
-        name,
-        &qtype.to_string()
+        resolver_ip, question.domain_name, question.q_type
     );
 
     let res = client
@@ -314,7 +308,7 @@ pub async fn resolve(
         return Err(anyhow!("Bad request"));
     }
 
-    let dns_response = res.json::<DnsResponse>().await?;
+    let dns_response = res.json::<ApiResponse>().await?;
 
     Ok(dns_response)
 }

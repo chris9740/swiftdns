@@ -51,7 +51,7 @@ impl FilterEntry<Blacklist> {
 fn get_filters() -> Result<Vec<Filter>> {
     use crate::config;
 
-    let directory_path = config::config_location().join("filters");
+    let directory_path = config::get_config_path().join("filters");
     let directory = fs::read_dir(directory_path)?;
 
     let filters: Vec<Filter> = directory
@@ -87,7 +87,7 @@ pub mod whitelist {
     use super::{FilterEntry, Whitelist};
 
     pub fn find(name: &str) -> Option<FilterEntry<Whitelist>> {
-        let whitelist_path = config::config_location().join("filters/whitelist.list");
+        let whitelist_path = config::get_config_path().join("filters/whitelist.list");
         let exists = whitelist_path.try_exists().unwrap_or(false);
 
         if !exists {

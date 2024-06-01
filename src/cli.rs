@@ -6,6 +6,7 @@ use crate::{
 };
 use anyhow::Result;
 use clap::{crate_description, crate_version, ArgAction, Parser, Subcommand};
+use dns_message_parser::question::{QClass, QType, Question};
 use std::{net::SocketAddr, time::Instant};
 
 #[derive(Parser)]
@@ -79,11 +80,17 @@ pub async fn start() -> Result<()> {
 
             let query_start_time = Instant::now();
 
-            dns::resolver::resolve(&mut client, &config, name, &qtype)
+            let question = Question {
+                domain_name: name.parse()?,
+                q_class: QClass::IN,
+                q_type: QType::try_from(qtype.value()).unwrap()
+            };
+
+            dns::resolver::resolve(&mut client, &config, &question)
                 .await
                 .map(|response| {
                     if response.answer.is_empty() {
-                        println!("No records found for {}", name);
+                        println!("No records found for {}", domain);
                         return;
                     }
 

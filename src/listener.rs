@@ -7,17 +7,7 @@ use std::{
 use anyhow::Result;
 use dns_message_parser::{Dns, Flags, RCode};
 
-use crate::{
-    cache::Cache,
-    config::SwiftConfig,
-    dns::{
-        self,
-        resolver::{DnsQuestion, QueryType},
-    },
-    domain::Domain,
-    filter,
-    http::Client,
-};
+use crate::{cache::Cache, config::SwiftConfig, dns, domain::Domain, filter, http::Client};
 
 async fn handle_query(
     query: &Dns,
@@ -45,12 +35,6 @@ async fn handle_query(
         RCode::NXDomain
     );
 
-    let record_type: QueryType = ok_or_rcode!(
-        question.q_type.to_string().parse(),
-        mut response,
-        RCode::NotImp
-    );
-
     if let Some(entry) = filter::blacklist::find(domain.name()) {
         println!("{}", entry.format_log_message(&domain));
 
@@ -59,17 +43,12 @@ async fn handle_query(
         return Ok(response);
     }
 
-    let question = DnsQuestion {
-        name: domain.name().to_string(),
-        qtype: record_type.value(),
-    };
-
-    let cached = cache.get(&question);
+    let cached = cache.get(question);
 
     let api_response = if let Some(cached) = cached.clone() {
         cached.response
     } else {
-        dns::resolver::resolve(client, config, domain.name(), &record_type).await?
+        dns::resolver::resolve(client, config, question).await?
     };
 
     if !api_response.answer.is_empty() {
@@ -124,7 +103,7 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
         let (amt, src) = socket.recv_from(&mut buf)?;
 
         match dns::decode(&buf[..amt]) {
-            Ok(query) => match handle_query(&query, &mut client, &config, &mut cache).await {
+            Ok(query) => match handle_query(&query, &mut client, config, &mut cache).await {
                 Ok(response) => {
                     socket.send_to(&dns::encode(response)?, src)?;
                 }
