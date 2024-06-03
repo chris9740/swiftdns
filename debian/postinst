@@ -9,4 +9,10 @@ mkdir -p /etc/swiftdns/filters
 chown swiftdns -R /etc/swiftdns
 chmod 755 -R /etc/swiftdns
 
+if [ ! -f /etc/swiftdns/metrics.db ]; then
+    touch /etc/swiftdns/metrics.db
+    chown swiftdns /etc/swiftdns/metrics.db
+    chmod 664 /etc/swiftdns/metrics.db
+fi
+
 exit 0

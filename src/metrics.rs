@@ -1,8 +1,9 @@
-use std::{collections::HashMap, fmt::Display};
+use std::fmt::Display;
 
 use anyhow::Result;
 use clap::ValueEnum;
 use csv::Writer;
+use indexmap::IndexMap;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::to_string_pretty;
@@ -14,9 +15,11 @@ pub struct DnsQueryLog {
 }
 
 pub fn log_query(conn: &Connection, query: DnsQueryLog) -> Result<()> {
+    let timestamp = chrono::Local::now().timestamp();
+    
     conn.execute(
-        "INSERT INTO dns_queries (domain, timestamp, cached, blacklisted) VALUES (?1, strftime('%s','now'), ?2, ?3)",
-        params![query.domain, query.cached, query.blacklisted],
+        "INSERT INTO dns_queries (domain, timestamp, cached, blacklisted) VALUES (?1, ?2, ?3, ?4)",
+        params![query.domain, timestamp, query.cached, query.blacklisted],
     )?;
 
     Ok(())
@@ -33,7 +36,8 @@ pub fn compile_analytics(conn: &Connection) -> Result<DomainAnalytics> {
     let mut stmt = conn.prepare(
         "SELECT domain, COUNT(*) as total_queries, SUM(cached) as cache_hits, SUM(blacklisted) as blacklist_hits
         FROM dns_queries
-        GROUP BY domain"
+        GROUP BY domain
+        ORDER BY MAX(timestamp) DESC"
     )?;
 
     let domain_iter = stmt.query_map([], |row| {
@@ -47,7 +51,7 @@ pub fn compile_analytics(conn: &Connection) -> Result<DomainAnalytics> {
         ))
     })?;
 
-    let mut domains: HashMap<String, DomainStats> = HashMap::new();
+    let mut domains: IndexMap<String, DomainStats> = IndexMap::new();
     for domain in domain_iter {
         let (domain_name, stats) = domain?;
         domains.insert(domain_name, stats);
@@ -73,7 +77,7 @@ impl Display for Format {
 
 #[derive(Debug)]
 pub struct DomainAnalytics {
-    domains: HashMap<String, DomainStats>,
+    domains: IndexMap<String, DomainStats>,
 }
 
 impl DomainAnalytics {
