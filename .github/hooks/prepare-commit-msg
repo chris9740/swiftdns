@@ -90,5 +90,12 @@ validate_commit_message() {
 
 validate_commit_message
 
-cargo clippy
-cargo test
+if ! cargo clippy -- -D warnings; then
+    print_generic_error "Clippy reported errors. Please fix them before committing."
+    exit 1
+fi
+
+if ! cargo test; then
+    print_generic_error "Some tests failed. Please fix them before committing."
+    exit 1
+fi
