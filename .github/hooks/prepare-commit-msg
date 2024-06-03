@@ -1,23 +1,14 @@
 #!/bin/bash
 
-prefixes=(
-    "feat"
-    "fix"
-    "docs"
-    "style"
-    "refactor"
-    "test"
-    "chore"
-    "security"
-)
-
+PREFIXES=("feat" "fix" "docs" "style" "refactor" "test" "chore" "security" "ci")
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 CYAN='\033[1;34m'
-GRAY='\033[0;37m'
 LIGHT_RED='\033[1;31m'
-ITALIC='\033[3m'
 COLOR_OFF='\033[0m'
+VISIBLE_MESSAGE_LIMIT=72
+#GRAY='\033[0;37m'
+#ITALIC='\033[3m'
 
 get_environment() {
     if [[ -n "$GIT_AUTHOR_NAME" ]]; then
@@ -29,10 +20,12 @@ get_environment() {
 
 get_commit_message() {
     if [[ $(get_environment) == "git" ]]; then
-        commit_message_file=$1
+        local commit_message_file="$1"
+        local commit_message
+
         commit_message=$(head -n1 "$commit_message_file")
 
-        echo $commit_message
+        echo "$commit_message"
     else
         echo "$1"
     fi
@@ -45,7 +38,7 @@ if [[ $(get_environment) == "manual" ]]; then
     fi
 fi
 
-commit_message=$(get_commit_message "$1" "$2")
+commit_message=$(get_commit_message "$1")
 
 print_generic_error() {
     echo -e "${CYAN}(prepare-commit-msg)${COLOR_OFF} ${LIGHT_RED}error:${COLOR_OFF} $1"
@@ -61,10 +54,8 @@ if ! command -v cargo >/dev/null 2>&1; then
 fi
 
 validate_commit_message() {
-    local visible_message_limit=72
-
-    if ((${#commit_message} > $visible_message_limit)); then
-        print_error_with_message "message too long (${#commit_message} > ${visible_message_limit})"
+    if ((${#commit_message} > VISIBLE_MESSAGE_LIMIT)); then
+        print_error_with_message "message too long (${#commit_message} > ${VISIBLE_MESSAGE_LIMIT})"
         exit 1
     fi
 
@@ -77,7 +68,7 @@ validate_commit_message() {
         return
     fi
 
-    for prefix in "${prefixes[@]}"; do
+    for prefix in "${PREFIXES[@]}"; do
         if [[ $commit_message =~ ^$prefix: || $commit_message =~ ^$prefix"(".*")" ]]; then
             return
         fi

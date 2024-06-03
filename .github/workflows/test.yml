@@ -19,6 +19,15 @@ jobs:
               with:
                   toolchain: stable
 
+            - name: Install ShellCheck
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y shellcheck
+
+            - name: Run ShellCheck
+              run: |
+                  shellcheck .github/hooks/prepare-commit-msg
+
             - name: Build and test
               run: |
                   cargo build --verbose
