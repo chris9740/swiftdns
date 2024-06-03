@@ -1,8 +1,5 @@
 use crate::{
-    config,
-    dns::{self, resolver::QueryType},
-    domain::Domain,
-    filter, http, listener,
+    config, db::create_conn, dns::{self, resolver::QueryType}, domain::Domain, filter, http, listener, metrics::{self, Format}
 };
 use anyhow::Result;
 use clap::{crate_description, crate_version, ArgAction, Parser, Subcommand};
@@ -52,6 +49,11 @@ enum Commands {
         #[arg(long = "tor", help = "Route through Tor", action = ArgAction::SetTrue)]
         tor: bool,
     },
+    #[command(about = "Output metrics to stdout as JSON")]
+    Metrics {
+        #[arg(long = "format", help = "The desired output format", default_value_t = Format::Json)]
+        format: Format,
+    }
 }
 
 pub async fn start() -> Result<()> {
@@ -116,6 +118,19 @@ pub async fn start() -> Result<()> {
                         }
                     );
                 })
+        }
+        Commands::Metrics { format } => {
+            let conn = create_conn()?;
+            let analytics = metrics::compile_analytics(&conn)?;
+
+            let output = match format {
+                Format::Csv => analytics.to_csv()?,
+                Format::Json => analytics.to_json()?,
+            };
+
+            println!("{output}");
+
+            Ok(())
         }
     }
 }

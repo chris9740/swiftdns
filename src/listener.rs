@@ -6,10 +6,21 @@ use std::{
 
 use anyhow::Result;
 use dns_message_parser::{Dns, Flags, RCode};
+use rusqlite::Connection;
 
-use crate::{cache::Cache, config::SwiftConfig, dns, domain::Domain, filter, http::Client};
+use crate::{
+    cache::Cache,
+    config::SwiftConfig,
+    db::create_conn,
+    dns,
+    domain::Domain,
+    filter,
+    http::Client,
+    metrics::{self, DnsQueryLog},
+};
 
 async fn handle_query(
+    conn: &Connection,
     query: &Dns,
     client: &mut Client,
     config: &SwiftConfig,
@@ -38,6 +49,15 @@ async fn handle_query(
     if let Some(entry) = filter::blacklist::find(domain.name()) {
         println!("{}", entry.format_log_message(&domain));
 
+        metrics::log_query(
+            conn,
+            DnsQueryLog {
+                domain: domain.to_unicode(),
+                blacklisted: true,
+                cached: false,
+            },
+        )?;
+
         response.flags.rcode = RCode::Refused;
 
         return Ok(response);
@@ -50,6 +70,15 @@ async fn handle_query(
     } else {
         dns::resolver::resolve(client, config, question).await?
     };
+
+    metrics::log_query(
+        conn,
+        DnsQueryLog {
+            domain: domain.to_unicode(),
+            blacklisted: false,
+            cached: cached.is_some(),
+        },
+    )?;
 
     if !api_response.answer.is_empty() {
         if cached.is_none() {
@@ -79,6 +108,8 @@ async fn handle_query(
 }
 
 pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
+    let conn = create_conn()?;
+
     let mut client = Client::create(config)?;
     let mut cache = Cache::new();
 
@@ -103,7 +134,7 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
         let (amt, src) = socket.recv_from(&mut buf)?;
 
         match dns::decode(&buf[..amt]) {
-            Ok(query) => match handle_query(&query, &mut client, config, &mut cache).await {
+            Ok(query) => match handle_query(&conn, &query, &mut client, config, &mut cache).await {
                 Ok(response) => {
                     socket.send_to(&dns::encode(response)?, src)?;
                 }

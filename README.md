@@ -113,10 +113,10 @@ If you want to route your DNS queries through the Tor network, you will need to 
     ```
 
 4. **Verify the Tor service:**
-    ```bash
+`bash
     sudo systemctl status tor
-    ```
-</details>
+    `
+ </details>
 
 ## Configuration
 
@@ -142,7 +142,7 @@ In contrast to Swiftdns, Cloudflare blocks domains by "resolving" them with `0.0
 
 ## Commands
 
--   ### Start
+### Start
 
 Normally you would want to start it with `systemctl start swiftdns`,
 but you can start the listener in the foreground with the `start` subcommand (override the configured address with `--address <socketaddr>`).
@@ -151,7 +151,9 @@ but you can start the listener in the foreground with the `start` subcommand (ov
 $ swiftdns start
 ```
 
--   ### Resolve
+---
+
+### Resolve
 
 Resolve a domain in the terminal. These queries are not cached
 
@@ -159,7 +161,33 @@ Resolve a domain in the terminal. These queries are not cached
 $ swiftdns resolve <domain> [type: A] [--tor]
 ```
 
-#### Flags
-- `--tor`: Boolean flag to route the query through the Tor network.
+**Flags**:
+
+`--tor`: Boolean flag to route the query through the Tor network.
+
+
+---
+
+### Metrics
+
+Output your metrics to stdout.
+
+
+
+```bash
+$ swiftdns metrics [--format: json]
+```
+
+**Flags**:
+
+`--format`: The desired output format. One of: `csv`, `json`.
+
+#### Save to file
+
+```bash
+$ swiftdns metrics > metrics.csv
+```
+
+---
 
 Of course, you can always run `swiftdns --help` to get more detailed documentation.
