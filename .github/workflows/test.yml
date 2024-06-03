@@ -2,9 +2,9 @@ name: Rust Testing
 
 on:
     push:
-        branches: [master, dev, feat/*]
+        branches: [master, dev, revision, feat/*]
     pull_request:
-        branches: [master, dev, feat/*]
+        branches: [master, dev, revision, feat/*]
 
 jobs:
     test:
