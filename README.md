@@ -86,7 +86,37 @@ The whitelist takes precedence over any blacklist file.
 
 ## Tor
 
-To achieve the most privacy possible, you can route your traffic through Tor. See [configuration](#configuration). Do note that this can drastically increase the time it takes to query, sometimes in excess of 5 seconds; you probably won't need this feature.
+To achieve the highest level of privacy, you can route your traffic through Tor. See [configuration](#configuration). This will noticeably increase query times. The initial query may take several seconds, while subsequent queries will be significantly faster, usually taking no more than 400ms if you have a fast network. For comparison, normal queries typically take anywhere from 10ms to 80ms.
+
+<details>
+<summary>Show installation steps for Tor</summary>
+
+If you want to route your DNS queries through the Tor network, you will need to install the Tor proxy. Here are the steps to install and set up Tor on a Debian-based system:
+
+1. **Install Tor:**
+
+    ```bash
+    sudo apt update
+    sudo apt install tor
+    ```
+
+2. **Start the Tor service:**
+
+    ```bash
+    sudo systemctl start tor
+    ```
+
+3. **Enable Tor to start on boot:**
+
+    ```bash
+    sudo systemctl enable tor
+    ```
+
+4. **Verify the Tor service:**
+    ```bash
+    sudo systemctl status tor
+    ```
+</details>
 
 ## Configuration
 
@@ -123,10 +153,13 @@ $ swiftdns start
 
 -   ### Resolve
 
-Resolve a domain in the terminal
+Resolve a domain in the terminal. These queries are not cached
 
 ```bash
-$ swiftdns resolve <domain> [type: A]
+$ swiftdns resolve <domain> [type: A] [--tor]
 ```
+
+#### Flags
+- `--tor`: Boolean flag to route the query through the Tor network.
 
 Of course, you can always run `swiftdns --help` to get more detailed documentation.

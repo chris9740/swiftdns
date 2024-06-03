@@ -248,7 +248,7 @@ impl ApiResponse {
             write!(tw, "{} ({})\t", record_type, record_type.value())?;
             write!(tw, "{}\t", record.ttl)?;
             write!(tw, "{}", record.data)?;
-            writeln!(tw, "")?;
+            writeln!(tw)?;
         }
 
         tw.flush()?;

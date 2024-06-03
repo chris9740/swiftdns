@@ -76,7 +76,7 @@ impl Domain {
             None => domain,
         };
 
-        let ascii_domain = idna::domain_to_ascii(&domain)?;
+        let ascii_domain = idna::domain_to_ascii(domain)?;
 
         for c in ascii_domain.chars() {
             if !c.is_ascii_alphanumeric() && c != '.' && c != '-' {
@@ -98,7 +98,7 @@ impl Domain {
         let labels: Vec<&str> = ascii_domain.split('.').collect();
 
         if labels.len() < 2 {
-            return Err(DomainError::FormatError("a fully-qualified domain name must have two or more labels".to_string()))
+            return Err(DomainError::FormatError("A fully-qualified domain name must have two or more labels".to_string()))
         }
 
         if labels
