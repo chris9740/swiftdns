@@ -1,6 +1,6 @@
 # Swiftdns
 
-Swiftdns is a local forwarding DNS resolver tailored for debian distributions, with focus on user privacy.
+Swiftdns is a local forwarding DNS resolver tailored for Debian distributions, with a focus on user privacy.
 
 ## Project
 
@@ -19,15 +19,15 @@ Swiftdns is under active development, and as such, may exhibit occasional compat
 -   systemd
 
 To install Swiftdns, first download the .deb file from the [release page](https://github.com/chris9740/swiftdns/releases/latest).
-Then, install it using your preferred method (e.g. `dpkg -i swiftdns.deb`).
+Then, install it using your preferred method (e.g., `dpkg -i swiftdns.deb`).
 
 Don't forget to configure your computer to use Swiftdns as a resolver.
 
 ## Features
 
-[Blacklisting](#blacklisting) - Queries for domains that you have blacklisted will never get to leave your machine. Useful for blocking websites with poor privacy practices (e.g. Facebook, Tiktok) or adult websites.
+[Blacklisting](#blacklisting) - Queries for domains that you have blacklisted will never get to leave your machine. Useful for blocking websites with poor privacy practices (e.g., Facebook, Tiktok) or adult websites.
 
-[Whitelisting](#whitelisting) - Exempt certain domains from being flagged by the blacklist. This can be used if you want to block e.g. `googleapis.com` and all it's subdomains except for `discord-attachments-uploads-prd.storage.googleapis.com`.
+[Whitelisting](#whitelisting) - Exempt certain domains from being flagged by the blacklist. This can be used if you want to block e.g., `googleapis.com` and all its subdomains except for `discord-attachments-uploads-prd.storage.googleapis.com`.
 
 [Tor Proxy](#tor) - Route all DNS queries through Tor.
 
@@ -40,21 +40,21 @@ Knowing this, let's create a `google.list` file to make sure we never accidental
 Inside our newly created `/etc/swiftdns/filters/google.list` file, we will enter the following:
 
 ```
-google.com
-www.google.com
+^google.com
+^www.google.com
 ```
 
 Once we save the file, the rules will go into effect immediately.
 
-If we want to block _all_ subdomains of `google.com`, we can do that using the _globstar pattern_ (`**.`), like this:
+If we want to block _all_ subdomains of `google.com`, we can simply add:
 
 ```
-**.google.com
+google.com
 ```
 
-This will block `google.com` and every single subdomain of `google.com`. Note that `**.` can only be specified at the very beginning of the line.
+This will block `google.com` and every single subdomain of `google.com`.
 
-In addition to globstar, we can also use simple wildcard matching:
+In addition to blocking subdomains by default, we can also use simple wildcard matching:
 
 ```
 *s.google.com
@@ -73,7 +73,7 @@ Let's make use of comments to describe our rules:
 *.mov
 
 # Let's also make sure we block "tiktok.com", "tiktokv.com", "tiktokcdn.com" and all their subdomains
-**.tiktok*.com*
+tiktok*.com*
 ```
 
 **Tip** - Test your rules with `swiftdns resolve example.com`. If done correctly, trying to resolve a blacklisted domain should give you an error.

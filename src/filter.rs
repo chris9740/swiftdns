@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File},
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Write},
     marker::PhantomData,
     path::PathBuf,
 };
@@ -8,7 +8,7 @@ use std::{
 use anyhow::Result;
 use wildmatch::WildMatch;
 
-use crate::domain::Domain;
+use crate::{config::get_config_path, domain::Domain};
 
 #[derive(serde::Serialize, Debug)]
 pub struct Filter {
@@ -141,17 +141,10 @@ fn enumerate<T>(path: &PathBuf, name: &str) -> Option<FilterEntry<T>> {
 
         let line_number = index + 1;
 
-        // This is a globstar pattern, a shorthand for blacklisting a domain and all it's subdomains.
-        //
-        // The pattern `**.example.com` will be "unwrapped" to two distinct patterns:
-        // `example.com` and `*.example.com`
-        if pattern.starts_with("**.") {
-            let domain_pattern = pattern.strip_prefix("**.").unwrap();
-            let subdomain_pattern = format!("*.{}", domain_pattern);
+        if pattern.starts_with('^') {
+            let domain_pattern = pattern.strip_prefix('^').unwrap();
 
-            if WildMatch::new(domain_pattern).matches(name)
-                || WildMatch::new(&subdomain_pattern).matches(name)
-            {
+            if WildMatch::new(domain_pattern).matches(name) {
                 return Some(FilterEntry {
                     file: filename,
                     pattern: pattern.to_string(),
@@ -161,7 +154,10 @@ fn enumerate<T>(path: &PathBuf, name: &str) -> Option<FilterEntry<T>> {
             }
         }
 
-        if WildMatch::new(pattern).matches(name) {
+        let subdomain_pattern = format!("*.{}", pattern);
+
+        if WildMatch::new(pattern).matches(name) || WildMatch::new(&subdomain_pattern).matches(name)
+        {
             return Some(FilterEntry {
                 file: filename,
                 pattern: pattern.to_string(),
@@ -172,6 +168,55 @@ fn enumerate<T>(path: &PathBuf, name: &str) -> Option<FilterEntry<T>> {
     }
 
     None
+}
+
+pub fn migrate_filters() -> Result<()> {
+    let migration_marker_path = get_config_path().join("filters/.migrated");
+
+    if migration_marker_path.exists() {
+        return Ok(());
+    }
+
+    let filters = get_filters()?;
+
+    for filter in filters {
+        let mut updated_lines: Vec<String> = Vec::new();
+
+        for line in filter.contents.lines() {
+            let line = line.trim().to_string();
+
+            if line.starts_with("**.") {
+                updated_lines.push(line.strip_prefix("**.").unwrap().to_string());
+                continue;
+            }
+
+            if line.starts_with('#')
+                || line.is_empty()
+                || line.starts_with('*')
+                || line.starts_with('^')
+            {
+                updated_lines.push(line);
+                continue;
+            }
+
+            updated_lines.push(format!("^{line}"));
+        }
+
+        let mut file = File::create(filter.path)?;
+
+        for line in updated_lines {
+            writeln!(file, "{}", line)?;
+        }
+    }
+
+    let mut migration_marker = File::create(migration_marker_path)?;
+
+    writeln!(
+        migration_marker,
+        "This file is used to indicate that the filter migration has been completed"
+    )?;
+
+    Ok(())
 }
 
 #[cfg(test)]

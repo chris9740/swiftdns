@@ -59,6 +59,8 @@ pub async fn start() -> Result<()> {
 
     let mut config = config::get_config()?;
 
+    filter::migrate_filters()?;
+
     match args.command {
         Commands::Start { address } => {
             let addr = address.unwrap_or(config.address);
