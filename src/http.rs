@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
-use anyhow::Result;
-use reqwest::{IntoUrl, RequestBuilder};
+use anyhow::{Context, Result};
+use reqwest::{IntoUrl, Proxy, RequestBuilder};
 
 use crate::config::SwiftConfig;
 
@@ -18,14 +18,18 @@ pub struct Client {
 impl Client {
     pub fn create(config: &SwiftConfig) -> Result<Self> {
         let client = if config.tor.enabled {
-            let tor_address: SocketAddr = config.tor.get_address()?;
+            let tor_address: SocketAddr = config
+                .tor
+                .get_address()
+                .context("Failed to get Tor proxy address")?;
 
-            let proxy = tor::proxy::create(tor_address);
+            let proxy = Proxy::all(format!("socks5h://{tor_address}"))
+                .context("Failed to configure proxy")?;
 
             reqwest::Client::builder()
                 .proxy(proxy)
                 .build()
-                .expect("Client should have valid configuration")
+                .context("Client should have valid configuration")?
         } else {
             reqwest::Client::new()
         };
@@ -40,81 +44,49 @@ impl Client {
         })
     }
 
-    pub async fn get<U>(&mut self, url: U) -> RequestBuilder
+    pub async fn get<U>(&mut self, url: U) -> Result<RequestBuilder>
     where
         U: IntoUrl,
     {
         if let ClientState::NeedsValidation = self.state {
-            self.validate().await;
+            self.validate().await?;
         }
 
-        self.client.get(url)
+        Ok(self.client.get(url))
     }
 
-    async fn validate(&mut self) {
-        tor::proxy::validate(&self.client).await;
+    async fn validate(&mut self) -> Result<()> {
+        if let ClientState::NeedsValidation = self.state {
+            tor::proxy::validate(&self.client).await?;
+            self.state = ClientState::Ready;
+        }
 
-        self.state = ClientState::Ready;
+        Ok(())
     }
 }
 
 mod tor {
     pub mod proxy {
-        use std::net::SocketAddr;
+        use anyhow::Result;
 
-        enum ValidationError {
-            Timeout,
-            ConnectionError,
-            Unknown,
-        }
-        
-        impl From<reqwest::Error> for ValidationError {
-            fn from(err: reqwest::Error) -> Self {
-                if err.is_timeout() {
-                    ValidationError::Timeout
-                } else if err.is_connect() {
-                    ValidationError::ConnectionError
-                } else {
-                    ValidationError::Unknown
-                }
-            }
-        }
-
-        pub fn create(address: SocketAddr) -> reqwest::Proxy {
-            reqwest::Proxy::all(format!("socks5h://{address}")).unwrap_or_else(|_| {
-                error!("Invalid socket address was provided ({address})");
-            })
-        }
-
-        pub async fn validate(client: &reqwest::Client) {
+        pub async fn validate(client: &reqwest::Client) -> Result<()> {
             let connectivity_check_url = "https://check.torproject.org";
-
             let response = client
                 .get(connectivity_check_url)
                 .send()
-                .await
-                .unwrap_or_else(|err| {
-                    let error_cause = if err.is_timeout() {
-                        "Timeout"
-                    } else if err.is_connect() {
-                        "Connection error"
-                    } else {
-                        "Unknown cause"
-                    };
+                .await?
+                .text()
+                .await?;
 
-                    error!("Failed to connect to Tor Connectivity URL {connectivity_check_url}: {error_cause}");
-                });
-
-            let response_body = response.text().await.unwrap_or_else(|_| {
-                error!("Failed to read the response from {connectivity_check_url}")
-            });
-
-            let did_route_successfully =
-                response_body.contains("Congratulations. This browser is configured to use Tor.");
-
-            if !did_route_successfully {
-                error!("Failed to verify Tor connectivity via {connectivity_check_url}");
+            if !response.contains("Congratulations. This browser is configured to use Tor.") {
+                anyhow::bail!(
+                    "The proxy settings are correct, but it looks like we're not actually routing through the Tor network.\n\
+                    Confirm that your configured proxy is specifically a Tor proxy, and ensure the Tor service is running."
+                );
             }
+
+            println!("Connection to Tor has been established, and the proxy has passed the integrity verification.");
+            Ok(())
         }
     }
 }

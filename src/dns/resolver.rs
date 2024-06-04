@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Context, Result};
 use colored::Colorize;
 use dns_message_parser::{
     question::Question,
@@ -242,7 +242,7 @@ impl ApiResponse {
 
         for record in &self.answer {
             let record_type =
-                RecordType::from_u16(record.rtype).ok_or_else(|| anyhow!("Unknown record type"))?;
+                RecordType::from_u16(record.rtype).context("Unknown record type")?;
 
             write!(tw, "{}\t", record.name.to_unicode())?;
             write!(tw, "{} ({})\t", record_type, record_type.value())?;
@@ -297,7 +297,7 @@ pub async fn resolve(
 
     let res = client
         .get(&url)
-        .await
+        .await?
         .header(reqwest::header::ACCEPT, "application/dns-json")
         .send()
         .await?;
@@ -305,7 +305,7 @@ pub async fn resolve(
     let status = res.status();
 
     if status == reqwest::StatusCode::BAD_REQUEST {
-        return Err(anyhow!("Bad request"));
+        anyhow::bail!("Bad request");
     }
 
     let dns_response = res.json::<ApiResponse>().await?;

@@ -1,7 +1,12 @@
 use crate::{
-    config, db::create_conn, dns::{self, resolver::QueryType}, domain::Domain, filter, http, listener, metrics::{self, Format}
+    config,
+    db::create_conn,
+    dns::{self, resolver::QueryType},
+    domain::Domain,
+    filter, http, listener,
+    metrics::{self, Format},
 };
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::{crate_description, crate_version, ArgAction, Parser, Subcommand};
 use dns_message_parser::question::{QClass, QType, Question};
 use std::{net::SocketAddr, time::Instant};
@@ -53,7 +58,7 @@ enum Commands {
     Metrics {
         #[arg(long = "format", help = "The desired output format", default_value_t = Format::Json)]
         format: Format,
-    }
+    },
 }
 
 pub async fn start() -> Result<()> {
@@ -87,7 +92,8 @@ pub async fn start() -> Result<()> {
             let question = Question {
                 domain_name: name.parse()?,
                 q_class: QClass::IN,
-                q_type: QType::try_from(qtype.value()).unwrap()
+                q_type: QType::try_from(qtype.value())
+                    .map_err(|_| anyhow!("Failed to parse question type"))?,
             };
 
             dns::resolver::resolve(&mut client, &config, &question)

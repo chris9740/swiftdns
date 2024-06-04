@@ -141,9 +141,7 @@ fn enumerate<T>(path: &PathBuf, name: &str) -> Option<FilterEntry<T>> {
 
         let line_number = index + 1;
 
-        if pattern.starts_with('^') {
-            let domain_pattern = pattern.strip_prefix('^').unwrap();
-
+        if let Some(domain_pattern) = pattern.strip_prefix('^') {
             if WildMatch::new(domain_pattern).matches(name) {
                 return Some(FilterEntry {
                     file: filename,
@@ -185,8 +183,8 @@ pub fn migrate_filters() -> Result<()> {
         for line in filter.contents.lines() {
             let line = line.trim().to_string();
 
-            if line.starts_with("**.") {
-                updated_lines.push(line.strip_prefix("**.").unwrap().to_string());
+            if let Some(stripped_line) = line.strip_prefix("**.") {
+                updated_lines.push(stripped_line.to_string());
                 continue;
             }
 

@@ -71,10 +71,7 @@ impl Domain {
         //
         // We are stripping it, since it's
         // redundant in our application.
-        let domain = match domain.strip_suffix('.') {
-            Some(s) => s,
-            None => domain,
-        };
+        let domain = domain.strip_suffix('.').unwrap_or(domain);
 
         let ascii_domain = idna::domain_to_ascii(domain)?;
 
@@ -98,7 +95,7 @@ impl Domain {
         let labels: Vec<&str> = ascii_domain.split('.').collect();
 
         if labels.len() < 2 {
-            return Err(DomainError::FormatError("A fully-qualified domain name must have two or more labels".to_string()))
+            return Err(DomainError::FormatError("a fully-qualified domain name must have two or more labels".to_string()))
         }
 
         if labels
