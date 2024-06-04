@@ -58,6 +58,8 @@ enum Commands {
     Metrics {
         #[arg(long = "format", help = "The desired output format", default_value_t = Format::Json)]
         format: Format,
+        #[arg(long = "reverse", short = 'r', help = "Reverse the order of the output", action = ArgAction::SetTrue)]
+        reverse: bool,
     },
 }
 
@@ -125,9 +127,13 @@ pub async fn start() -> Result<()> {
                     );
                 })
         }
-        Commands::Metrics { format } => {
+        Commands::Metrics { format, reverse } => {
             let conn = create_conn()?;
-            let analytics = metrics::compile_analytics(&conn)?;
+            let mut analytics = metrics::compile_analytics(&conn)?;
+
+            if reverse {
+                analytics.reverse();
+            }
 
             let output = match format {
                 Format::Csv => analytics.to_csv()?,

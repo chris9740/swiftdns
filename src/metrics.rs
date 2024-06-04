@@ -26,7 +26,7 @@ pub fn log_query(conn: &Connection, query: DnsQueryLog) -> Result<()> {
 }
 
 #[derive(Debug, Serialize)]
-struct DomainStats {
+pub struct DomainStats {
     total_queries: usize,
     cache_hits: usize,
     blacklist_hits: usize,
@@ -81,6 +81,10 @@ pub struct DomainAnalytics {
 }
 
 impl DomainAnalytics {
+    pub fn reverse(&mut self) {
+        self.domains.reverse();
+    }
+
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         to_string_pretty(&self.domains)
     }
