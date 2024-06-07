@@ -6,11 +6,11 @@ Thank you for considering contributing to Swiftdns.
 
 ### Commit messages
 
-Commit messages should follow the [Semantic Commit Messages](https://gist.github.com/joshbuchea/6f47e86d2510bce28f8e7f42ae84c716) convention. Make sure they never exceed 72 in length.
+Commit messages should adhere to the [Semantic Commit Messages](https://gist.github.com/joshbuchea/6f47e86d2510bce28f8e7f42ae84c716) convention. Ensure each line of the commit message does not exceed 72 characters.
 
-### Verify conformity before commit
+### Installing hooks
 
-This repository has a `prepare-commit-msg` hook that ensures the code is formatted by clippy, passes the tests, as well as making sure the commit message follows the conventions above.
+This repository uses a `prepare-commit-msg` hook to format code with Clippy, run tests, and verify that the commit message follows our conventions. This helps maintain code quality and consistency.
 
 Using this hook is recommended in order to make your developing experience as frictionless as possible, but it is not required.
 
@@ -21,6 +21,8 @@ git config core.hooksPath .github/hooks/
 ```
 
 Once you've ran the command above, the hook will be executed every time you run `git commit`, and will cancel the commit if the commit message is improper or if the code doesn't pass the tests.
+
+**Note**: To debug the hook, you can execute it directly to test its functionality without committing: `.github/hooks/prepare-commit-msg "fix: implement fix for ..."`. The hook will perform all checks as if it were triggered by a commit attempt.
 
 ## Tips
 
