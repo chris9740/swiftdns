@@ -10,7 +10,7 @@ use rusqlite::Connection;
 
 use crate::{
     cache::Cache,
-    config::SwiftConfig,
+    config::{Scope, SwiftConfig},
     db::create_conn,
     dns,
     domain::Domain,
@@ -113,7 +113,6 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
     let mut client = Client::create(config)?;
     let mut cache = Cache::new();
 
-    // TODO: make sure listener is local unless global listener is explicitly enabled
     let socket = match UdpSocket::bind(addr) {
         Ok(socket) => socket,
         Err(err) => {
@@ -132,6 +131,11 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
     loop {
         let mut buf = [0; 512];
         let (amt, src) = socket.recv_from(&mut buf)?;
+
+        if config.scope == Some(Scope::Local) && !src.ip().is_loopback() {
+            eprintln!("Received non-local request from {src}");
+            continue;
+        }
 
         match dns::decode(&buf[..amt]) {
             Ok(query) => match handle_query(&conn, &query, &mut client, config, &mut cache).await {

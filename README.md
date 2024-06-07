@@ -116,7 +116,7 @@ If you want to route your DNS queries through the Tor network, you will need to 
 `bash
     sudo systemctl status tor
     `
- </details>
+   </details>
 
 ## Configuration
 
@@ -127,11 +127,12 @@ After saving your configuration file, run `systemctl restart swiftdns` to have t
 The value for `mode` will dictate which of Cloudflare's resolvers to use. `Standard = 1.1.1.1`, `Safe = 1.1.1.2` (blocks malware), `Clean = 1.1.1.3` (blocks malware and adult websites).
 In contrast to Swiftdns, Cloudflare blocks domains by "resolving" them with `0.0.0.0`, while Swiftdns returns the `REFUSED` status.
 
-| Key     | Default        | Value(s)                           | Description                             |
-| ------- | -------------- | ---------------------------------- | --------------------------------------- |
-| mode    | `Standard`     | One of `Standard`, `Safe`, `Clean` | Configure which mode to run Swiftdns in |
-| address | `127.0.0.1:53` | A socket address (with port)       | The address to bind the listener to     |
-| tor     | -              | [TorConfig](#tor-configuration)    | Configuration options for Tor           |
+| Key     | Default        | Value(s)                           | Description                                                           |
+| ------- | -------------- | ---------------------------------- | --------------------------------------------------------------------- |
+| mode    | `Standard`     | One of `Standard`, `Safe`, `Clean` | Configure which mode to run Swiftdns in                               |
+| scope   | `Local`        | One of `Local`, `Global`           | If scope is `Local`, only queries sent from loopback will be accepted |
+| address | `127.0.0.1:53` | A socket address (with port)       | The address to bind the listener to                                   |
+| tor     | -              | [TorConfig](#tor-configuration)    | Configuration options for Tor                                         |
 
 ### Tor Configuration
 
@@ -165,14 +166,11 @@ $ swiftdns resolve <domain> [type: A] [--tor]
 
 `--tor`: Boolean flag to route the query through the Tor network.
 
-
 ---
 
 ### Metrics
 
 Output your metrics to stdout.
-
-
 
 ```bash
 $ swiftdns metrics [--format: json]

@@ -71,8 +71,15 @@ impl Default for SwiftConfigV1 {
 pub struct SwiftConfig {
     pub version: u8,
     pub mode: Mode,
+    pub scope: Option<Scope>,
     pub address: SocketAddr,
     pub tor: TorConfig,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub enum Scope {
+    Global,
+    Local,
 }
 
 impl Default for SwiftConfig {
@@ -80,6 +87,7 @@ impl Default for SwiftConfig {
         Self {
             version: 2,
             mode: Mode::Standard,
+            scope: Some(Scope::Local),
             address: "127.0.0.1:53".parse().unwrap(),
             tor: TorConfig {
                 enabled: false,
@@ -95,6 +103,7 @@ impl From<SwiftConfigV1> for SwiftConfig {
             version: 2,
             mode: old_config.mode,
             address: old_config.address,
+            scope: Some(Scope::Local),
             tor: TorConfig {
                 enabled: old_config.tor,
                 address: None,

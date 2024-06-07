@@ -2,6 +2,7 @@
 
 version = 2
 mode = "Standard"
+scope = "Local"
 address = "127.0.0.1:5053"
 
 [tor]
