@@ -48,6 +48,9 @@ impl FilterEntry<Blacklist> {
     }
 }
 
+/// Retreives all filter entries from the configuration directory.
+///
+/// This reads from the `filters/` directory only, it does not enter sub-directories.
 fn get_filters() -> Result<Vec<Filter>> {
     use crate::config;
 
@@ -81,11 +84,11 @@ fn get_filters() -> Result<Vec<Filter>> {
 }
 
 pub mod whitelist {
-
     use crate::config;
 
     use super::{FilterEntry, Whitelist};
 
+    /// Searches for a domain in the whitelist filters and returns the relevant filter entry if found.
     pub fn find(name: &str) -> Option<FilterEntry<Whitelist>> {
         let whitelist_path = config::get_config_path().join("filters/whitelist.list");
         let exists = whitelist_path.try_exists().unwrap_or(false);
@@ -101,6 +104,8 @@ pub mod whitelist {
 pub mod blacklist {
     use super::{Blacklist, FilterEntry};
 
+    /// Searches for a domain in the blacklist filters and returns the relevant filter entry if found,
+    /// unless the domain is also found in the whitelist.
     pub fn find(name: &str) -> Option<FilterEntry<Blacklist>> {
         if super::whitelist::find(name).is_some() {
             return None;
@@ -168,6 +173,11 @@ fn enumerate<T>(path: &PathBuf, name: &str) -> Option<FilterEntry<T>> {
     None
 }
 
+/// Initiates a migration process for filter files to update their formatting or content.
+///
+/// Checks if a migration is needed by looking for a '.migrated' marker file. If not found,
+/// it reads each filter file, updates lines according to specified rules, and writes the changes back.
+/// It finally creates a '.migrated' file to mark completion.
 pub fn migrate_filters() -> Result<()> {
     let migration_marker_path = get_config_path().join("filters/.migrated");
 

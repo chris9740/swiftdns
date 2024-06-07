@@ -1,18 +1,9 @@
 use std::{fmt::Display, str::FromStr};
 
-use anyhow::Result;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Domain(String);
-
-impl FromStr for Domain {
-    type Err = DomainError;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        Domain::new(s)
-    }
-}
 
 #[derive(Debug, PartialEq)]
 pub enum DomainError {
@@ -61,9 +52,29 @@ impl From<idna::Errors> for DomainError {
     }
 }
 
-impl Domain {
-    pub fn new(domain: &str) -> Result<Self, DomainError> {
-        let domain = domain.to_lowercase();
+impl FromStr for Domain {
+    type Err = DomainError;
+
+    /// Tries to create a new `Domain` from a given string.
+    /// Validates the domain string for adherence to DNS naming conventions, including checks for:
+    /// - Character validity: Only alphanumeric characters, hyphens, and dots are allowed.
+    /// - Length constraints: The entire domain must not exceed 253 characters, and individual labels must not exceed 63 characters.
+    /// - Label rules: Labels must not start or end with a hyphen and must contain at least one character.
+    /// - Fully-qualified domains: Domains are expected to have at least two labels to be considered fully-qualified.
+    ///
+    /// # Errors
+    /// Returns `Err` with `DomainError` detailing the specific reason for validation error.
+    ///
+    /// # Examples
+    /// Basic usage:
+    /// ```
+    /// # use swiftdns::Domain;
+    /// # use std::str::FromStr;
+    /// let domain = Domain::from_str("example.com.").unwrap();
+    /// assert_eq!(domain.name(), "example.com");
+    /// ```
+    fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
+        let domain = s.to_lowercase();
         let domain = domain.trim();
 
         // Fully qualified domain names (FQDN) end with an extra dot,
@@ -72,7 +83,6 @@ impl Domain {
         // We are stripping it, since it's
         // redundant in our application.
         let domain = domain.strip_suffix('.').unwrap_or(domain);
-
         let ascii_domain = idna::domain_to_ascii(domain)?;
 
         for c in ascii_domain.chars() {
@@ -131,11 +141,38 @@ impl Domain {
 
         Ok(Domain(ascii_domain))
     }
+}
 
+impl Domain {
+    /// Returns the punycode version of this domain.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use swiftdns::Domain;
+    /// # use std::str::FromStr;
+    /// let domain = Domain::from_str("hälsa.se").unwrap();
+    ///
+    /// assert_eq!(domain.name(), "xn--hlsa-loa.se");
+    /// ```
     pub fn name(&self) -> &str {
         &self.0
     }
 
+    /// Converts and returns the domain name to its unicode format.
+    ///
+    /// This method is useful when the domain name needs to be displayed in a human-friendly format,
+    /// especially if the domain name contains international characters.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use swiftdns::Domain;
+    /// # use std::str::FromStr;
+    /// let domain = Domain::from_str("xn--hlsa-loa.se").unwrap();
+    ///
+    /// assert_eq!(domain.to_unicode(), "hälsa.se".to_string());
+    /// ```
     pub fn to_unicode(&self) -> String {
         idna::domain_to_unicode(&self.0).0
     }
@@ -149,32 +186,36 @@ impl Display for Domain {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use crate::domain::{Domain, DomainError, DomainSegment};
 
     #[test]
     fn valid_domain_works() {
-        assert_eq!(Domain::new("signal.org.").unwrap().name(), "signal.org");
-        assert_eq!(Domain::new("signal.org").unwrap().name(), "signal.org");
+        assert_eq!(Domain::from_str("signal.org.").unwrap().name(), "signal.org");
+        assert_eq!(Domain::from_str("signal.org").unwrap().name(), "signal.org");
     }
 
     #[test]
     fn unicode_works() {
         let unicode_name = "münich.de";
-        let domain = Domain::new(unicode_name).unwrap();
+        let punycode_name = "xn--mnich-kva.de";
+        let domain = Domain::from_str(unicode_name).unwrap();
 
-        assert_eq!(domain.name(), "xn--mnich-kva.de");
+        assert_eq!(domain.name(), punycode_name);
         assert_eq!(format!("{domain}"), unicode_name);
+        assert_eq!(Domain::from_str(punycode_name).unwrap().to_unicode(), unicode_name);
     }
 
     #[test]
     fn invalid_domain_causes_error() {
-        let invalid_char_err = Domain::new("tuta_nota.com").unwrap_err();
+        let invalid_char_err = Domain::from_str("tuta_nota.com").unwrap_err();
 
         assert_eq!(invalid_char_err, DomainError::InvalidCharacter('_'));
         assert_eq!(invalid_char_err.to_string(), "Invalid character found: '_'");
 
         assert_eq!(
-            Domain::new("torproject.o").unwrap_err(),
+            Domain::from_str("torproject.o").unwrap_err(),
             DomainError::InvalidLength {
                 segment: DomainSegment::TLD,
                 min: 2,
@@ -183,7 +224,7 @@ mod tests {
         );
 
         assert_eq!(
-            Domain::new("www.duckduckgo-.com").unwrap_err(),
+            Domain::from_str("www.duckduckgo-.com").unwrap_err(),
             DomainError::InvalidLabel {
                 label: String::from("duckduckgo-"),
                 why: String::from("A label cannot contain a leading or trailing hyphen")

@@ -95,14 +95,14 @@ pub async fn start() -> Result<()> {
                 domain_name: name.parse()?,
                 q_class: QClass::IN,
                 q_type: QType::try_from(qtype.value())
-                    .map_err(|_| anyhow!("Failed to parse question type"))?,
+                    .map_err(|value| anyhow!("Failed to parse question type from value: {value}"))?,
             };
 
             dns::resolver::resolve(&mut client, &config, &question)
                 .await
                 .map(|response| {
                     if response.answer.is_empty() {
-                        println!("No records found for {}", domain);
+                        println!("{domain}: No DNS records found");
                         return;
                     }
 

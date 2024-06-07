@@ -11,3 +11,5 @@ pub mod filter;
 pub mod http;
 pub mod listener;
 pub mod metrics;
+
+pub use domain::Domain;
