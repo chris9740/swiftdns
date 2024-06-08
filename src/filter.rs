@@ -5,7 +5,7 @@ use std::{
     path::PathBuf,
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use wildmatch::WildMatch;
 
 use crate::{config::get_config_path, domain::Domain};
@@ -51,34 +51,55 @@ impl FilterEntry<Blacklist> {
 /// Retreives all filter entries from the configuration directory.
 ///
 /// This reads from the `filters/` directory only, it does not enter sub-directories.
-fn get_filters() -> Result<Vec<Filter>> {
+pub fn get_filters() -> Result<Vec<Filter>> {
     use crate::config;
 
-    let directory_path = config::get_config_path().join("filters");
-    let directory = fs::read_dir(directory_path)?;
+    let base_directory_path = config::get_config_path().join("filters");
+    let mut filters = Vec::new();
 
-    let filters: Vec<Filter> = directory
-        .filter_map(|object| {
-            let dir_entry = object.expect("Should always be Ok");
+    // Function to process each directory entry
+    let mut process_entry = |entry: fs::DirEntry| -> Result<()> {
+        let path = entry.path();
+        let pathname = path.to_string_lossy().to_string();
 
-            let path = dir_entry.path();
-            let pathname = path.to_string_lossy().to_string();
+        // Check if the entry is a file and ends with ".list"
+        if path.is_file() && pathname.ends_with(".list") {
+            let contents = fs::read_to_string(&path).context("Failed to read filter contents")?;
+            let filename = path
+                .file_name()
+                .context("Failed to get filename")?
+                .to_string_lossy()
+                .to_string();
 
-            if !path.is_file() || !pathname.ends_with(".list") {
-                return None;
-            }
-
-            let contents = fs::read_to_string(&path).unwrap_or_default();
-            let filename = path.file_name()?.to_string_lossy().to_string();
-
-            Some(Filter {
+            filters.push(Filter {
                 path,
                 pathname,
                 filename,
                 contents,
-            })
-        })
-        .collect();
+            });
+        }
+
+        Ok(())
+    };
+
+    // Process each entry in the base directory
+    let entries = fs::read_dir(base_directory_path)?
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter();
+
+    for entry in entries {
+        if entry.path().is_dir() {
+            // If it's a directory, read its contents
+            let sub_entries = fs::read_dir(entry.path())?.collect::<Result<Vec<_>, _>>()?;
+
+            for sub_entry in sub_entries {
+                process_entry(sub_entry)?;
+            }
+        } else {
+            // Process the file if it's not in a sub-directory
+            process_entry(entry)?;
+        }
+    }
 
     Ok(filters)
 }

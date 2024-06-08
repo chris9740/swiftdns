@@ -33,7 +33,7 @@ Don't forget to configure your computer to use Swiftdns as a resolver.
 
 ## Blacklisting
 
-Swiftdns will look for our blacklist rules inside `.list` files located in the root of `/etc/swiftdns/filters/`.
+Swiftdns will look for our blacklist rules inside `.list` files located in `/etc/swiftdns/filters/` and any of its immediate subdirectories, in case you want to organize your rules.
 
 Knowing this, let's create a `google.list` file to make sure we never accidentally use `google.com` for searching, while still being able to visit subdomains such as `maps.google.com` and `translate.google.com`.
 
@@ -113,10 +113,10 @@ If you want to route your DNS queries through the Tor network, you will need to 
     ```
 
 4. **Verify the Tor service:**
-`bash
+    ```bash
     sudo systemctl status tor
-    `
-   </details>
+    ```
+    </details>
 
 ## Configuration
 
