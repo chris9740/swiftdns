@@ -56,10 +56,12 @@ enum Commands {
     },
     #[command(about = "Output metrics to stdout as JSON")]
     Metrics {
-        #[arg(long = "format", help = "The desired output format", default_value_t = Format::Json)]
+        #[arg(long = "format", short = 'f', help = "The desired output format", default_value_t = Format::Json)]
         format: Format,
         #[arg(long = "reverse", short = 'r', help = "Reverse the order of the output", action = ArgAction::SetTrue)]
         reverse: bool,
+        #[arg(long = "search", short = 's', help = "Filter the output by domain name")]
+        search: Option<String>,
     },
 }
 
@@ -94,8 +96,9 @@ pub async fn start() -> Result<()> {
             let question = Question {
                 domain_name: name.parse()?,
                 q_class: QClass::IN,
-                q_type: QType::try_from(qtype.value())
-                    .map_err(|value| anyhow!("Failed to parse question type from value: {value}"))?,
+                q_type: QType::try_from(qtype.value()).map_err(|value| {
+                    anyhow!("Failed to parse question type from value: {value}")
+                })?,
             };
 
             dns::resolver::resolve(&mut client, &config, &question)
@@ -127,9 +130,13 @@ pub async fn start() -> Result<()> {
                     );
                 })
         }
-        Commands::Metrics { format, reverse } => {
+        Commands::Metrics {
+            format,
+            reverse,
+            search,
+        } => {
             let conn = create_conn()?;
-            let mut analytics = metrics::compile_analytics(&conn)?;
+            let mut analytics = metrics::compile_analytics(&conn, search.as_deref())?;
 
             if reverse {
                 analytics.reverse();

@@ -7,6 +7,12 @@ pub fn create_conn() -> Result<Connection> {
     let db_path = get_config_path().join("metrics.db");
     let conn = Connection::open(db_path)?;
 
+    setup_db(&conn)?;
+
+    Ok(conn)
+}
+
+pub fn setup_db(conn: &Connection) -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS dns_queries (
             id INTEGER PRIMARY KEY,
@@ -17,5 +23,5 @@ pub fn create_conn() -> Result<Connection> {
         )", [],
     )?;
 
-    Ok(conn)
+    Ok(())
 }

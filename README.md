@@ -179,11 +179,12 @@ $ swiftdns metrics [--format: json]
 **Flags**:
 
 `--format`: The desired output format. One of: `csv`, `json`.
+`--search`: A string to search for in the metrics.
 
 #### Save to file
 
 ```bash
-$ swiftdns metrics > metrics.csv
+$ swiftdns metrics --format csv > metrics.csv
 ```
 
 ---
