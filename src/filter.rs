@@ -2,7 +2,7 @@ use std::{
     fs::{self, File},
     io::{BufRead, BufReader, Write},
     marker::PhantomData,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Result};
@@ -50,56 +50,51 @@ impl FilterEntry<Blacklist> {
 
 /// Retreives all filter entries from the configuration directory.
 ///
-/// This reads from the `filters/` directory only, it does not enter sub-directories.
-pub fn get_filters() -> Result<Vec<Filter>> {
+/// This reads from the `filters/` directory with infinite depth and returns a list of all filter files.
+pub fn load_filters() -> Result<Vec<Filter>> {
     use crate::config;
 
     let base_directory_path = config::get_config_path().join("filters");
     let mut filters = Vec::new();
 
-    // Function to process each directory entry
-    let mut process_entry = |entry: fs::DirEntry| -> Result<()> {
-        let path = entry.path();
-        let pathname = path.to_string_lossy().to_string();
+    // Define a recursive function to traverse directories
+    fn visit_dirs(dir: &Path, filters: &mut Vec<Filter>) -> Result<()> {
+        if dir.is_dir() {
+            for entry in fs::read_dir(dir)? {
+                let entry = entry?;
+                let path = entry.path();
 
-        // Check if the entry is a file and ends with ".list"
-        if path.is_file() && pathname.ends_with(".list") {
-            let contents = fs::read_to_string(&path).context("Failed to read filter contents")?;
-            let filename = path
-                .file_name()
-                .context("Failed to get filename")?
-                .to_string_lossy()
-                .to_string();
+                if path.is_dir() {
+                    // Recursively call visit_dirs for subdirectories
+                    visit_dirs(&path, filters)?;
+                } else {
+                    let pathname = path.to_string_lossy().to_string();
 
-            filters.push(Filter {
-                path,
-                pathname,
-                filename,
-                contents,
-            });
-        }
+                    // Check if the entry is a file and ends with ".list"
+                    if pathname.ends_with(".list") {
+                        let contents =
+                            fs::read_to_string(&path).context("Failed to read filter contents")?;
+                        let filename = path
+                            .file_name()
+                            .context("Failed to get filename")?
+                            .to_string_lossy()
+                            .to_string();
 
-        Ok(())
-    };
-
-    // Process each entry in the base directory
-    let entries = fs::read_dir(base_directory_path)?
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-
-    for entry in entries {
-        if entry.path().is_dir() {
-            // If it's a directory, read its contents
-            let sub_entries = fs::read_dir(entry.path())?.collect::<Result<Vec<_>, _>>()?;
-
-            for sub_entry in sub_entries {
-                process_entry(sub_entry)?;
+                        filters.push(Filter {
+                            path: path.clone(),
+                            pathname,
+                            filename,
+                            contents,
+                        });
+                    }
+                }
             }
-        } else {
-            // Process the file if it's not in a sub-directory
-            process_entry(entry)?;
         }
+        Ok(())
     }
+
+    // Start the recursive traversal from the base directory
+    visit_dirs(&base_directory_path, &mut filters)?;
 
     Ok(filters)
 }
@@ -132,7 +127,7 @@ pub mod blacklist {
             return None;
         }
 
-        let filters = super::get_filters().unwrap();
+        let filters = super::load_filters().unwrap();
 
         let blacklists = filters
             .iter()
@@ -206,7 +201,7 @@ pub fn migrate_filters() -> Result<()> {
         return Ok(());
     }
 
-    let filters = get_filters()?;
+    let filters = load_filters()?;
 
     for filter in filters {
         let mut updated_lines: Vec<String> = Vec::new();

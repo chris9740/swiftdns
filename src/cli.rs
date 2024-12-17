@@ -8,8 +8,14 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use clap::{crate_description, crate_version, ArgAction, Parser, Subcommand};
+use colored::Colorize;
 use dns_message_parser::question::{QClass, QType, Question};
-use std::{net::SocketAddr, time::Instant};
+use std::{
+    ffi::OsStr,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    time::Instant,
+};
 
 #[derive(Parser)]
 #[command(
@@ -60,9 +66,15 @@ enum Commands {
         format: Format,
         #[arg(long = "reverse", short = 'r', help = "Reverse the order of the output", action = ArgAction::SetTrue)]
         reverse: bool,
-        #[arg(long = "search", short = 's', help = "Filter the output by domain name")]
+        #[arg(
+            long = "search",
+            short = 's',
+            help = "Filter the output by domain name"
+        )]
         search: Option<String>,
     },
+    #[command(about = "List all filters", name = "filters")]
+    ListFilters,
 }
 
 pub async fn start() -> Result<()> {
@@ -148,6 +160,34 @@ pub async fn start() -> Result<()> {
             };
 
             println!("{output}");
+
+            Ok(())
+        }
+        Commands::ListFilters => {
+            let mut filters = filter::load_filters()?;
+            filters.sort_by_key(|filter| filter.pathname.clone());
+
+            println!("{}", "Filters".bold());
+
+            for (index, filter) in filters.iter().enumerate() {
+                let path = Path::new(&filter.pathname);
+                let relative_path = path
+                    .iter()
+                    .skip_while(|&component| component != OsStr::new("filters"))
+                    .skip(1)
+                    .collect::<PathBuf>();
+
+                let filter_name = relative_path
+                    .file_stem()
+                    .map(|name| name.to_string_lossy())
+                    .unwrap_or_else(|| relative_path.to_string_lossy());
+
+                let mut v: Vec<char> = filter_name.chars().collect();
+                v[0] = v[0].to_uppercase().next().unwrap();
+                let filter_name = v.into_iter().collect::<String>();
+
+                println!(" {}) {} {}", index + 1, filter_name, format!("({})", relative_path.display().to_string().italic()));
+            }
 
             Ok(())
         }
