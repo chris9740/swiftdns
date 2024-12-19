@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use colored::Colorize;
 use dns_message_parser::{
     question::Question,
-    rr::{self, Class, RR},
+    rr::{self, Class, NonEmptyVec, RR},
     DomainName,
 };
 use serde::Deserialize;
@@ -28,6 +28,7 @@ pub enum RecordType {
     NS,
     SRV,
     SOA,
+    TXT,
 }
 
 impl RecordType {
@@ -40,6 +41,7 @@ impl RecordType {
             RecordType::NS => 2,
             RecordType::SRV => 33,
             RecordType::SOA => 6,
+            RecordType::TXT => 16,
         }
     }
 
@@ -82,7 +84,12 @@ impl RecordType {
             RecordType::MX => {
                 let priority_and_domain = data.splitn(2, ' ').collect::<Vec<&str>>();
                 let priority = priority_and_domain[0].parse::<u16>()?;
-                let exchange = priority_and_domain[1].parse::<DomainName>()?;
+                let exchange_str = priority_and_domain[1];
+                let exchange = if exchange_str == "." {
+                    DomainName::default()
+                } else {
+                    DomainName::from_str(exchange_str)?
+                };
 
                 Ok(RR::MX(rr::MX {
                     domain_name,
@@ -143,6 +150,23 @@ impl RecordType {
                     retry,
                     expire,
                     min_ttl,
+                }))
+            }
+            RecordType::TXT => {
+                let strings: Vec<String> = data
+                    .split('\"')
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>();
+
+                let strings = NonEmptyVec::try_from(strings)
+                    .map_err(|_| "TXT record must have at least one string".to_string())?;
+
+                Ok(RR::TXT(rr::TXT {
+                    domain_name,
+                    ttl,
+                    class,
+                    strings,
                 }))
             }
         }
@@ -207,6 +231,7 @@ impl Display for RecordType {
             RecordType::NS => "NS",
             RecordType::SRV => "SRV",
             RecordType::SOA => "SOA",
+            RecordType::TXT => "TXT",
         };
 
         f.write_str(str)
@@ -241,8 +266,7 @@ impl ApiResponse {
         writeln!(tw, "{}", headers.join("\t"))?;
 
         for record in &self.answer {
-            let record_type =
-                RecordType::from_u16(record.rtype).context("Unknown record type")?;
+            let record_type = RecordType::from_u16(record.rtype).context("Unknown record type")?;
 
             write!(tw, "{}\t", record.name.to_unicode())?;
             write!(tw, "{} ({})\t", record_type, record_type.value())?;
@@ -259,7 +283,8 @@ impl ApiResponse {
         let remaining: String = output_splitter.next().unwrap_or("").to_string();
 
         for item in headers {
-            header_line = header_line.replace(item, &item.on_truecolor(190, 190, 190).black().to_string());
+            header_line =
+                header_line.replace(item, &item.on_truecolor(190, 190, 190).black().to_string());
         }
 
         Ok(format!("{header_line}\n{remaining}"))

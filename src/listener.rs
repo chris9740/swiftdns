@@ -49,7 +49,7 @@ async fn handle_query(
     if let Some(entry) = filter::blacklist::find(domain.name()) {
         println!("{}", entry.format_log_message(&domain));
 
-        metrics::log_query(
+        metrics::track(
             conn,
             DnsQueryLog {
                 domain: domain.to_unicode(),
@@ -71,7 +71,7 @@ async fn handle_query(
         dns::resolver::resolve(client, config, question).await?
     };
 
-    metrics::log_query(
+    metrics::track(
         conn,
         DnsQueryLog {
             domain: domain.to_unicode(),
@@ -80,16 +80,21 @@ async fn handle_query(
         },
     )?;
 
-    if !api_response.answer.is_empty() {
+    let rcode = ok_or_rcode!(
+        RCode::try_from(api_response.status),
+        mut response,
+        RCode::ServFail
+    );
+
+    if rcode == RCode::NoError {
         if cached.is_none() {
             cache.set(question.clone(), api_response.clone());
         }
 
         response.answers = dns::map_answers(&api_response.answer);
-        response.authorities = api_response
-            .authority
-            .map_or(vec![], |authority| dns::map_answers(&authority));
-
+        if let Some(authority) = &api_response.authority {
+            response.authorities = dns::map_answers(authority);
+        }
         response.flags = Flags {
             qr: true,
             aa: false,

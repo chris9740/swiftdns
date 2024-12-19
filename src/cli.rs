@@ -186,7 +186,12 @@ pub async fn start() -> Result<()> {
                 v[0] = v[0].to_uppercase().next().unwrap();
                 let filter_name = v.into_iter().collect::<String>();
 
-                println!(" {}) {} {}", index + 1, filter_name, format!("({})", relative_path.display().to_string().italic()));
+                println!(
+                    " {}) {} {}",
+                    index + 1,
+                    filter_name,
+                    format!("({})", relative_path.display().to_string().italic())
+                );
             }
 
             Ok(())

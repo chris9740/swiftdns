@@ -14,7 +14,7 @@ pub struct DnsQueryLog {
     pub blacklisted: bool,
 }
 
-pub fn log_query(conn: &Connection, query: DnsQueryLog) -> Result<()> {
+pub fn track(conn: &Connection, query: DnsQueryLog) -> Result<()> {
     let timestamp = chrono::Local::now().timestamp();
 
     conn.execute(
@@ -217,7 +217,7 @@ instagram.com,3,0,3";
         ];
 
         for query in queries {
-            log_query(&conn, query).unwrap();
+            track(&conn, query).unwrap();
         }
 
         conn
