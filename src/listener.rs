@@ -86,28 +86,24 @@ async fn handle_query(
         RCode::ServFail
     );
 
-    if rcode == RCode::NoError {
-        if cached.is_none() {
-            cache.set(question.clone(), api_response.clone());
-        }
-
-        response.answers = dns::map_answers(&api_response.answer);
-        if let Some(authority) = &api_response.authority {
-            response.authorities = dns::map_answers(authority);
-        }
-        response.flags = Flags {
-            qr: true,
-            aa: false,
-            tc: api_response.tc,
-            ra: api_response.ra,
-            ad: api_response.ad,
-            rcode: RCode::NoError,
-
-            ..query.flags
-        }
-    } else {
-        response.flags.rcode = RCode::NXDomain;
+    if cached.is_none() {
+        cache.set(question.clone(), api_response.clone());
     }
+
+    response.answers = dns::map_answers(&api_response.answer);
+    if let Some(authority) = &api_response.authority {
+        response.authorities = dns::map_answers(authority);
+    }
+    response.flags = Flags {
+        qr: true,
+        aa: false,
+        tc: api_response.tc,
+        ra: api_response.ra,
+        ad: api_response.ad,
+        rcode,
+
+        ..query.flags
+    };
 
     Ok(response)
 }

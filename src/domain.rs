@@ -105,7 +105,9 @@ impl FromStr for Domain {
         let labels: Vec<&str> = ascii_domain.split('.').collect();
 
         if labels.len() < 2 {
-            return Err(DomainError::FormatError("a fully-qualified domain name must have two or more labels".to_string()))
+            return Err(DomainError::FormatError(
+                "a fully-qualified domain name must have two or more labels".to_string(),
+            ));
         }
 
         if labels
@@ -192,7 +194,10 @@ mod tests {
 
     #[test]
     fn valid_domain_works() {
-        assert_eq!(Domain::from_str("signal.org.").unwrap().name(), "signal.org");
+        assert_eq!(
+            Domain::from_str("signal.org.").unwrap().name(),
+            "signal.org"
+        );
         assert_eq!(Domain::from_str("signal.org").unwrap().name(), "signal.org");
     }
 
@@ -204,7 +209,10 @@ mod tests {
 
         assert_eq!(domain.name(), punycode_name);
         assert_eq!(format!("{domain}"), unicode_name);
-        assert_eq!(Domain::from_str(punycode_name).unwrap().to_unicode(), unicode_name);
+        assert_eq!(
+            Domain::from_str(punycode_name).unwrap().to_unicode(),
+            unicode_name
+        );
     }
 
     #[test]

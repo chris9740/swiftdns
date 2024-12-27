@@ -20,7 +20,8 @@ pub fn setup_db(conn: &Connection) -> Result<()> {
             timestamp INTEGER NOT NULL,
             cached BOOLEAN NOT NULL,
             blacklisted BOOLEAN NOT NULL
-        )", [],
+        )",
+        [],
     )?;
 
     Ok(())

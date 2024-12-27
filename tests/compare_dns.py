@@ -76,6 +76,10 @@ def main():
     domains = ["duckduckgo.com", "example.com"]
     query_types = ["A", "AAAA", "CNAME", "MX", "TXT", "NS", "SOA"]
 
+    print("Starting DNS comparison test")
+    print(f"Domains:", ", ".join(domains))
+    print(f"Query types:", ", ".join(query_types))
+
     for domain in domains:
         for qtype in query_types:
             swiftdns_response = None
@@ -84,7 +88,9 @@ def main():
             try:
                 swiftdns_response = query_dns(servers["swiftdns"], domain, qtype)
             except (dns.exception.DNSException, ValueError) as e:
-                print(f"SwiftDNS query failed for {domain} with query type {qtype}: {e}")
+                print(
+                    f"SwiftDNS query failed for {domain} with query type {qtype}: {e}"
+                )
                 exit(1)
 
             try:

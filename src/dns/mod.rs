@@ -40,7 +40,7 @@ pub fn map_answers(answers: &Vec<ApiAnswer>) -> Vec<RR> {
                 //if let Ok(rr) = record_type.construct_rr(answer) {
                 //    group.push(rr);
                 //}
-                
+
                 match record_type.construct_rr(answer) {
                     Ok(rr) => group.push(rr),
                     Err(err) => {
