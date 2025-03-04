@@ -56,6 +56,7 @@ async fn handle_query(
                 blacklisted: true,
                 cached: false,
             },
+            config,
         )?;
 
         response.flags.rcode = RCode::Refused;
@@ -78,6 +79,7 @@ async fn handle_query(
             blacklisted: false,
             cached: cached.is_some(),
         },
+        config,
     )?;
 
     let rcode = ok_or_rcode!(

@@ -73,6 +73,7 @@ pub struct SwiftConfig {
     pub mode: Mode,
     pub scope: Option<Scope>,
     pub address: SocketAddr,
+    pub log_queries: Option<bool>,
     pub tor: TorConfig,
 }
 
@@ -89,6 +90,7 @@ impl Default for SwiftConfig {
             mode: Mode::Standard,
             scope: Some(Scope::Local),
             address: "127.0.0.1:53".parse().unwrap(),
+            log_queries: Some(false),
             tor: TorConfig {
                 enabled: false,
                 address: Some(DEFAULT_TOR_ADDR.to_string()),
@@ -104,6 +106,7 @@ impl From<SwiftConfigV1> for SwiftConfig {
             mode: old_config.mode,
             address: old_config.address,
             scope: Some(Scope::Local),
+            log_queries: Some(false),
             tor: TorConfig {
                 enabled: old_config.tor,
                 address: None,

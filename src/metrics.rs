@@ -8,13 +8,19 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::to_string_pretty;
 
+use crate::config::SwiftConfig;
+
 pub struct DnsQueryLog {
     pub domain: String,
     pub cached: bool,
     pub blacklisted: bool,
 }
 
-pub fn track(conn: &Connection, query: DnsQueryLog) -> Result<()> {
+pub fn track(conn: &Connection, query: DnsQueryLog, config: &SwiftConfig) -> Result<()> {
+    if !config.log_queries.eq(&Some(true)) {
+        return Ok(());
+    }
+
     let timestamp = chrono::Local::now().timestamp();
 
     conn.execute(
@@ -182,6 +188,10 @@ instagram.com,3,0,3";
     fn initialize_db_with_data() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
         setup_db(&conn).unwrap();
+        let config = SwiftConfig {
+            log_queries: Some(true),
+            ..Default::default()
+        };
 
         let queries = vec![
             DnsQueryLog {
@@ -217,7 +227,7 @@ instagram.com,3,0,3";
         ];
 
         for query in queries {
-            track(&conn, query).unwrap();
+            track(&conn, query, &config).unwrap();
         }
 
         conn
