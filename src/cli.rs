@@ -12,6 +12,7 @@ use colored::Colorize;
 use dns_message_parser::question::{QClass, QType, Question};
 use std::{
     ffi::OsStr,
+    io::Write as _,
     net::SocketAddr,
     path::{Path, PathBuf},
     time::Instant,
@@ -159,7 +160,10 @@ pub async fn start() -> Result<()> {
                 Format::Json => analytics.to_json()?,
             };
 
-            println!("{output}");
+            let mut lock = std::io::stdout().lock();
+            lock.write_all(output.as_bytes())?;
+            lock.write(b"\n")?;
+            lock.flush()?;
 
             Ok(())
         }

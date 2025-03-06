@@ -137,9 +137,9 @@ impl DomainAnalytics {
                 &stats.cache_hits.to_string(),
                 &stats.blacklist_hits.to_string(),
             ])?;
+            wtr.flush()?;
         }
 
-        wtr.flush()?;
         Ok(String::from_utf8(wtr.into_inner()?)?.trim().to_string())
     }
 }
