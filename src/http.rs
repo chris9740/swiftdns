@@ -85,7 +85,6 @@ mod tor {
                 );
             }
 
-            println!("Connection to Tor has been established, and the proxy has passed the integrity verification.");
             Ok(())
         }
     }
