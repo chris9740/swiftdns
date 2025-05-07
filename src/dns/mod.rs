@@ -1,5 +1,7 @@
-use dns_message_parser::{rr::RR, DecodeError, Dns, EncodeError, Flags};
+use dns_message_parser::{rr::RR, Dns, Flags};
 use message_types::DnsJsonAnswer;
+
+use crate::error::DnsError;
 
 use self::resolver::DnsRecordType;
 
@@ -11,7 +13,7 @@ pub mod resolver;
 pub struct DnsEncoder;
 
 impl DnsEncoder {
-    pub fn encode_response(query: Dns) -> Result<bytes::BytesMut, EncodeError> {
+    pub fn encode_response(query: Dns) -> Result<bytes::BytesMut, DnsError> {
         let response = Dns {
             id: query.id,
             flags: Self::construct_response_flags(&query.flags),
@@ -21,7 +23,7 @@ impl DnsEncoder {
             answers: query.answers,
         };
 
-        Dns::encode(&response)
+        Dns::encode(&response).map_err(DnsError::EncodeError)
     }
 
     fn construct_response_flags(query_flags: &Flags) -> Flags {
@@ -39,8 +41,8 @@ impl DnsEncoder {
     }
 }
 
-pub fn decode(query_bytes: &[u8]) -> Result<Dns, DecodeError> {
-    Dns::decode(Vec::from(query_bytes).into())
+pub fn decode(query_bytes: &[u8]) -> Result<Dns, DnsError> {
+    Dns::decode(Vec::from(query_bytes).into()).map_err(DnsError::DecodeError)
 }
 
 pub fn map_answers(answers: &[DnsJsonAnswer]) -> Vec<RR> {

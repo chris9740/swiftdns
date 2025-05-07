@@ -4,7 +4,7 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 use std::collections::HashMap;
 
-use crate::{config::SwiftConfig, http};
+use crate::{config::SwiftConfig, error::DnsError, http};
 
 use super::message_types::DnsJsonResponse;
 
@@ -43,12 +43,17 @@ pub async fn query(
     provider: &Provider,
     question: &Question,
     config: &SwiftConfig,
-) -> Result<DnsJsonResponse> {
+) -> Result<DnsJsonResponse, DnsError> {
     let mode = provider
         .modes
         .iter()
         .find(|m| m.name == config.resolver.mode)
-        .ok_or_else(|| anyhow::anyhow!("Provider mode not found"))?;
+        .ok_or_else(|| {
+            DnsError::ProviderError(format!(
+                "Provider {} does not support mode {}",
+                provider.name, config.resolver.mode
+            ))
+        })?;
 
     let url = provider.url.replace("{ip}", &mode.ip);
     let url = format!(
@@ -58,16 +63,20 @@ pub async fn query(
 
     let res = client
         .get(&url)
-        .await?
+        .await
+        .map_err(|e| DnsError::NetworkError(format!("Failed to send request: {}", e)))?
         .header(reqwest::header::ACCEPT, "application/dns-json")
         .send()
-        .await?;
+        .await
+        .map_err(|e| DnsError::NetworkError(format!("Failed to send request: {}", e)))?;
 
     if res.status() == reqwest::StatusCode::BAD_REQUEST {
-        anyhow::bail!("Bad request");
+        return Err(DnsError::QueryError("Bad request".to_string()));
     }
 
-    Ok(res.json().await?)
+    res.json()
+        .await
+        .map_err(|e| DnsError::NetworkError(format!("Failed to parse response: {}", e)))
 }
 
 pub fn is_valid_provider(name: &str) -> bool {

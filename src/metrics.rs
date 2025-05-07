@@ -8,7 +8,7 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::to_string_pretty;
 
-use crate::config::SwiftConfig;
+use crate::{config::SwiftConfig, error::DnsError};
 
 pub struct DnsQueryLog {
     pub domain: String,
@@ -16,7 +16,7 @@ pub struct DnsQueryLog {
     pub blacklisted: bool,
 }
 
-pub fn track(conn: &Connection, query: DnsQueryLog, config: &SwiftConfig) -> Result<()> {
+pub fn track(conn: &Connection, query: DnsQueryLog, config: &SwiftConfig) -> Result<(), DnsError> {
     if !config.log_queries.eq(&Some(true)) {
         return Ok(());
     }
@@ -26,7 +26,8 @@ pub fn track(conn: &Connection, query: DnsQueryLog, config: &SwiftConfig) -> Res
     conn.execute(
         "INSERT INTO dns_queries (domain, timestamp, cached, blacklisted) VALUES (?1, ?2, ?3, ?4)",
         params![query.domain, timestamp, query.cached, query.blacklisted],
-    )?;
+    )
+    .map_err(|e| DnsError::DatabaseError(format!("Failed to insert query log: {}", e)))?;
 
     Ok(())
 }

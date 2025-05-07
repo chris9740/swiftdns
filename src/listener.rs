@@ -1,5 +1,4 @@
 use std::{
-    error::Error,
     io::ErrorKind,
     net::{SocketAddr, UdpSocket},
 };
@@ -14,6 +13,7 @@ use crate::{
     db::create_conn,
     dns::{self, DnsEncoder},
     domain::Domain,
+    error::DnsError,
     filter,
     http::Client,
     metrics::{self, DnsQueryLog},
@@ -25,7 +25,7 @@ async fn handle_query(
     client: &mut Client,
     config: &SwiftConfig,
     cache: &mut Cache,
-) -> Result<Dns, Box<dyn Error>> {
+) -> Result<Dns, DnsError> {
     let mut response = query.clone();
 
     // RFC 1035 allows multiple questions per query for forward compatibility.
@@ -64,12 +64,14 @@ async fn handle_query(
         return Ok(response);
     }
 
-    let cached = cache.get(question);
+    let cached = cache.get(question)?;
 
     let api_response = if let Some(cached) = cached.clone() {
         cached.response
     } else {
-        dns::resolver::resolve(client, config, question).await?
+        dns::resolver::resolve(client, config, question)
+            .await
+            .map_err(|e| DnsError::ProviderError(e.to_string()))?
     };
 
     metrics::track(
@@ -89,7 +91,7 @@ async fn handle_query(
     );
 
     if cached.is_none() {
-        cache.set(question.clone(), api_response.clone());
+        cache.set(question.clone(), api_response.clone())?;
     }
 
     response.answers = dns::map_answers(&api_response.answer);

@@ -12,7 +12,7 @@ use std::{
 };
 use strum::{EnumIter, IntoEnumIterator};
 
-use crate::{config::SwiftConfig, http};
+use crate::{config::SwiftConfig, error::DnsError, http};
 
 use super::{
     message_types::{DnsJsonAnswer, DnsJsonResponse},
@@ -192,7 +192,6 @@ impl Display for DnsRecordType {
     }
 }
 
-// If you need to restrict which types can be queried:
 #[derive(Debug, Clone, Copy)]
 pub struct QueryType(DnsRecordType);
 
@@ -218,7 +217,6 @@ impl QueryType {
     }
 }
 
-// Implement necessary trait derivations
 impl From<QueryType> for DnsRecordType {
     fn from(qt: QueryType) -> Self {
         qt.0
@@ -229,7 +227,7 @@ pub async fn resolve(
     client: &mut http::Client,
     config: &SwiftConfig,
     question: &Question,
-) -> Result<DnsJsonResponse> {
+) -> Result<DnsJsonResponse, DnsError> {
     let provider = config.get_active_provider();
     let provider = provider::get_provider(provider.0).expect("Provider not found");
 

@@ -56,7 +56,7 @@ pub async fn execute(args: ResolveArgs, config: &mut SwiftConfig) -> Result<()> 
             .map_err(|value| anyhow!("Failed to parse question type from value: {value}"))?,
     };
 
-    dns::resolver::resolve(&mut client, config, &question)
+    Ok(dns::resolver::resolve(&mut client, config, &question)
         .await
         .map(|response| {
             if response.answer.is_empty() {
@@ -85,5 +85,5 @@ pub async fn execute(args: ResolveArgs, config: &mut SwiftConfig) -> Result<()> 
             );
 
             ()
-        })
+        })?)
 }
