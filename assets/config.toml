@@ -2,7 +2,6 @@
 
 address = "127.0.0.1:5053"
 scope = "Local"
-log_queries = false
 
 [resolver]
 provider = "Cloudflare"

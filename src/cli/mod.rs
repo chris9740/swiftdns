@@ -21,8 +21,6 @@ pub enum Commands {
     Start(commands::start::StartArgs),
     #[command(about = "Resolve a domain name")]
     Resolve(commands::resolve::ResolveArgs),
-    #[command(about = "Output metrics to stdout as JSON")]
-    Metrics(commands::metrics::MetricsArgs),
     #[command(about = "List all filters", name = "filters")]
     ListFilters,
 }
@@ -36,7 +34,6 @@ pub async fn start() -> Result<()> {
     match args.command {
         Commands::Start(args) => commands::start::execute(args, &mut config).await,
         Commands::Resolve(args) => commands::resolve::execute(args, &mut config).await,
-        Commands::Metrics(args) => commands::metrics::execute(args).await,
         Commands::ListFilters => commands::filters::execute().await,
     }
 }

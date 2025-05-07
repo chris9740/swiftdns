@@ -74,7 +74,6 @@ pub struct ResolverConfig {
 pub struct SwiftConfig {
     pub scope: Option<Scope>,
     pub address: SocketAddr,
-    pub log_queries: Option<bool>,
     pub resolver: ResolverConfig,
     pub tor: TorConfig,
 }
@@ -102,7 +101,6 @@ impl Default for SwiftConfig {
         Self {
             scope: Some(Scope::Local),
             address: "127.0.0.1:53".parse().unwrap(),
-            log_queries: Some(false),
             resolver: ResolverConfig {
                 provider: "Cloudflare".to_string(),
                 mode: Mode::Standard.to_string(),
