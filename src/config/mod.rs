@@ -65,23 +65,6 @@ impl TorConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SwiftConfigV1 {
-    pub mode: String,
-    pub address: SocketAddr,
-    pub tor: bool,
-}
-
-impl Default for SwiftConfigV1 {
-    fn default() -> Self {
-        Self {
-            mode: Mode::Standard.to_string(),
-            address: "127.0.0.1:53".parse().unwrap(),
-            tor: false,
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct ResolverConfig {
     pub provider: String,
     pub mode: String,
@@ -89,7 +72,6 @@ pub struct ResolverConfig {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SwiftConfig {
-    pub version: u8,
     pub scope: Option<Scope>,
     pub address: SocketAddr,
     pub log_queries: Option<bool>,
@@ -118,7 +100,6 @@ impl FromStr for Scope {
 impl Default for SwiftConfig {
     fn default() -> Self {
         Self {
-            version: 2,
             scope: Some(Scope::Local),
             address: "127.0.0.1:53".parse().unwrap(),
             log_queries: Some(false),
@@ -129,25 +110,6 @@ impl Default for SwiftConfig {
             tor: TorConfig {
                 enabled: false,
                 address: Some(DEFAULT_TOR_ADDR.to_string()),
-            },
-        }
-    }
-}
-
-impl From<SwiftConfigV1> for SwiftConfig {
-    fn from(old_config: SwiftConfigV1) -> Self {
-        Self {
-            version: 2,
-            address: old_config.address,
-            scope: Some(Scope::Local),
-            log_queries: Some(false),
-            resolver: ResolverConfig {
-                provider: "Cloudflare".to_string(),
-                mode: old_config.mode,
-            },
-            tor: TorConfig {
-                enabled: old_config.tor,
-                address: None,
             },
         }
     }
@@ -190,14 +152,6 @@ impl SwiftConfig {
 
 pub fn get_config() -> Result<SwiftConfig, ConfigError> {
     let config_path = get_config_path().join("config.toml");
-
-    if let Ok(old_config) = confy::load_path::<SwiftConfigV1>(&config_path) {
-        let new_config: SwiftConfig = old_config.into();
-        confy::store_path(&config_path, &new_config)?;
-        new_config.validate()?;
-        return Ok(new_config);
-    }
-
     let config = confy::load_path::<SwiftConfig>(config_path).map_err(ConfigError::from)?;
     config.validate()?;
     Ok(config)
