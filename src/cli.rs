@@ -1,5 +1,5 @@
 use crate::{
-    config,
+    config::{self, Scope},
     db::create_conn,
     dns::{self, resolver::QueryType},
     domain::Domain,
@@ -40,6 +40,13 @@ enum Commands {
             value_parser = clap::value_parser!(SocketAddr)
         )]
         address: Option<SocketAddr>,
+        #[arg(
+            help = "Specify the scope of the DNS server",
+            long = "scope",
+            short = 's',
+            value_parser = clap::value_parser!(Scope)
+        )]
+        scope: Option<Scope>,
     },
     #[command(about = "Resolve a domain name")]
     Resolve {
@@ -86,8 +93,12 @@ pub async fn start() -> Result<()> {
     filter::migrate_filters()?;
 
     match args.command {
-        Commands::Start { address } => {
+        Commands::Start { address, scope } => {
             let addr = address.unwrap_or(config.address);
+
+            if let Some(scope) = scope {
+                config.scope = Some(scope);
+            }
 
             listener::start(&addr, &config).await
         }

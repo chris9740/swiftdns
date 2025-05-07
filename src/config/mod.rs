@@ -4,6 +4,7 @@ use std::{
     env,
     net::SocketAddr,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
 use anyhow::Result;
@@ -77,10 +78,22 @@ pub struct SwiftConfig {
     pub tor: TorConfig,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Scope {
     Global,
     Local,
+}
+
+impl FromStr for Scope {
+    type Err = ConfigError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "global" => Ok(Scope::Global),
+            "local" => Ok(Scope::Local),
+            _ => Err(ConfigError::InvalidScope(s.to_string())),
+        }
+    }
 }
 
 impl Default for SwiftConfig {

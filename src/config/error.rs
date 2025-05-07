@@ -6,6 +6,7 @@ pub enum ConfigError {
     AddrParseError(std::net::AddrParseError),
     ConfyError(confy::ConfyError),
     InvalidMode(String),
+    InvalidScope(String),
 }
 
 impl From<std::io::Error> for ConfigError {
@@ -33,6 +34,7 @@ impl fmt::Display for ConfigError {
             ConfigError::AddrParseError(e) => write!(f, "Address parse error: {}", e),
             ConfigError::ConfyError(e) => write!(f, "Configuration error: {}", e),
             ConfigError::InvalidMode(mode) => write!(f, "Invalid mode `{}`", mode),
+            ConfigError::InvalidScope(scope) => write!(f, "Invalid scope `{}`", scope),
         }
     }
 }
@@ -44,6 +46,7 @@ impl std::error::Error for ConfigError {
             ConfigError::AddrParseError(e) => Some(e),
             ConfigError::ConfyError(e) => Some(e),
             ConfigError::InvalidMode(_) => None,
+            ConfigError::InvalidScope(_) => None,
         }
     }
 }
