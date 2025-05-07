@@ -7,7 +7,7 @@ use tabwriter::TabWriter;
 
 use crate::Domain;
 
-use super::resolver::RecordType;
+use super::resolver::DnsRecordType;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "PascalCase")]
@@ -37,7 +37,8 @@ impl DnsJsonResponse {
         writeln!(tw, "{}", headers.join("\t"))?;
 
         for record in &self.answer {
-            let record_type = RecordType::from_u16(record.rtype).context("Unknown record type")?;
+            let record_type =
+                DnsRecordType::from_u16(record.rtype).context("Unknown record type")?;
 
             write!(tw, "{}\t", record.name.to_unicode())?;
             write!(tw, "{} ({})\t", record_type, record_type.value())?;

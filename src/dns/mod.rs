@@ -1,7 +1,7 @@
 use dns_message_parser::{rr::RR, DecodeError, Dns, EncodeError, Flags};
 use message_types::DnsJsonAnswer;
 
-use self::resolver::RecordType;
+use self::resolver::DnsRecordType;
 
 pub mod message_types;
 pub mod provider;
@@ -47,7 +47,7 @@ pub fn map_answers(answers: &[DnsJsonAnswer]) -> Vec<RR> {
     answers
         .iter()
         .filter_map(|answer| {
-            RecordType::from_u16(answer.rtype).and_then(|record_type| {
+            DnsRecordType::from_u16(answer.rtype).and_then(|record_type| {
                 record_type
                     .construct_rr(answer)
                     .map_err(|err| {

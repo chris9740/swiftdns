@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use crate::{
     config::SwiftConfig,
-    dns::{self, resolver::QueryType},
+    dns::{self, resolver::DnsRecordType},
     domain::Domain,
     filter,
     http::Client,
@@ -25,10 +25,10 @@ pub struct ResolveArgs {
         name = "type",
         help = "The type of record to query for",
         required = false,
-        value_parser = clap::value_parser!(QueryType),
-        default_value_t = QueryType::A
+        value_parser = clap::value_parser!(DnsRecordType),
+        default_value_t = DnsRecordType::A
     )]
-    pub qtype: QueryType,
+    pub qtype: DnsRecordType,
 
     #[arg(long = "tor", help = "Route through Tor", action = clap::ArgAction::SetTrue)]
     pub tor: bool,

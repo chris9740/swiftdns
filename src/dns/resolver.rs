@@ -19,35 +19,26 @@ use super::{
     provider,
 };
 
-#[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, EnumIter, Clone, Copy, Eq, Hash, PartialEq)]
 #[allow(clippy::upper_case_acronyms)]
-pub enum RecordType {
-    A,
-    AAAA,
-    CNAME,
-    MX,
-    NS,
-    SRV,
-    SOA,
-    TXT,
+pub enum DnsRecordType {
+    A = 1,
+    AAAA = 28,
+    CNAME = 5,
+    MX = 15,
+    NS = 2,
+    SRV = 33,
+    SOA = 6,
+    TXT = 16,
 }
 
-impl RecordType {
+impl DnsRecordType {
     pub fn value(&self) -> u16 {
-        match self {
-            RecordType::A => 1,
-            RecordType::AAAA => 28,
-            RecordType::CNAME => 5,
-            RecordType::MX => 15,
-            RecordType::NS => 2,
-            RecordType::SRV => 33,
-            RecordType::SOA => 6,
-            RecordType::TXT => 16,
-        }
+        *self as u16
     }
 
     pub fn from_u16(value: u16) -> Option<Self> {
-        RecordType::iter().find(|r| r.value() == value)
+        Self::iter().find(|r| r.value() == value)
     }
 
     pub fn construct_rr(&self, answer: &DnsJsonAnswer) -> Result<RR, Box<dyn Error>> {
@@ -57,7 +48,7 @@ impl RecordType {
         let data = &answer.data;
 
         match self {
-            RecordType::A => {
+            DnsRecordType::A => {
                 let ipv4_addr = data.parse::<Ipv4Addr>()?;
                 Ok(RR::A(rr::A {
                     domain_name,
@@ -65,7 +56,7 @@ impl RecordType {
                     ipv4_addr,
                 }))
             }
-            RecordType::AAAA => {
+            DnsRecordType::AAAA => {
                 let ipv6_addr = data.parse::<Ipv6Addr>()?;
                 Ok(RR::AAAA(rr::AAAA {
                     domain_name,
@@ -73,7 +64,7 @@ impl RecordType {
                     ipv6_addr,
                 }))
             }
-            RecordType::CNAME => {
+            DnsRecordType::CNAME => {
                 let c_name = data.parse::<DomainName>()?;
                 Ok(RR::CNAME(rr::CNAME {
                     domain_name,
@@ -82,7 +73,7 @@ impl RecordType {
                     c_name,
                 }))
             }
-            RecordType::MX => {
+            DnsRecordType::MX => {
                 let priority_and_domain = data.splitn(2, ' ').collect::<Vec<&str>>();
                 let priority = priority_and_domain[0].parse::<u16>()?;
                 let exchange_str = priority_and_domain[1];
@@ -100,7 +91,7 @@ impl RecordType {
                     exchange,
                 }))
             }
-            RecordType::NS => {
+            DnsRecordType::NS => {
                 let ns_d_name = data.parse::<DomainName>()?;
 
                 Ok(RR::NS(rr::NS {
@@ -110,7 +101,7 @@ impl RecordType {
                     ns_d_name,
                 }))
             }
-            RecordType::SRV => {
+            DnsRecordType::SRV => {
                 let parts = data.split_whitespace().collect::<Vec<&str>>();
                 let priority = parts[0].parse::<u16>()?;
                 let weight = parts[1].parse::<u16>()?;
@@ -126,7 +117,7 @@ impl RecordType {
                     target,
                 }))
             }
-            RecordType::SOA => {
+            DnsRecordType::SOA => {
                 let parts: Vec<&str> = data.split_whitespace().collect();
                 if parts.len() < 7 {
                     return Err("Insufficient data for SOA record".into());
@@ -153,7 +144,7 @@ impl RecordType {
                     min_ttl,
                 }))
             }
-            RecordType::TXT => {
+            DnsRecordType::TXT => {
                 let strings: Vec<String> = data
                     .split('\"')
                     .filter(|s| !s.is_empty())
@@ -174,31 +165,7 @@ impl RecordType {
     }
 }
 
-#[derive(Debug, Clone, Copy, EnumIter)]
-pub enum QueryType {
-    A = 1,
-    AAAA = 28,
-    CNAME = 5,
-    MX = 15,
-    TXT = 16,
-    SOA = 6,
-}
-
-impl QueryType {
-    pub fn value(&self) -> u16 {
-        *self as u16
-    }
-
-    pub fn name(&self) -> String {
-        format!("{self:#?}")
-    }
-
-    pub fn from_u16(value: u16) -> Option<Self> {
-        Self::iter().find(|r| r.value() == value)
-    }
-}
-
-impl FromStr for QueryType {
+impl FromStr for DnsRecordType {
     type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -209,33 +176,52 @@ impl FromStr for QueryType {
     }
 }
 
-impl TryFrom<&str> for QueryType {
-    type Error = &'static str;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        Self::from_str(value)
-    }
-}
-impl Display for QueryType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name())
-    }
-}
-
-impl Display for RecordType {
+impl Display for DnsRecordType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match self {
-            RecordType::A => "A",
-            RecordType::AAAA => "AAAA",
-            RecordType::CNAME => "CNAME",
-            RecordType::MX => "MX",
-            RecordType::NS => "NS",
-            RecordType::SRV => "SRV",
-            RecordType::SOA => "SOA",
-            RecordType::TXT => "TXT",
+            Self::A => "A",
+            Self::AAAA => "AAAA",
+            Self::CNAME => "CNAME",
+            Self::MX => "MX",
+            Self::NS => "NS",
+            Self::SRV => "SRV",
+            Self::SOA => "SOA",
+            Self::TXT => "TXT",
         };
-
         f.write_str(str)
+    }
+}
+
+// If you need to restrict which types can be queried:
+#[derive(Debug, Clone, Copy)]
+pub struct QueryType(DnsRecordType);
+
+impl QueryType {
+    pub fn new(record_type: DnsRecordType) -> Option<Self> {
+        match record_type {
+            DnsRecordType::A
+            | DnsRecordType::AAAA
+            | DnsRecordType::CNAME
+            | DnsRecordType::MX
+            | DnsRecordType::TXT
+            | DnsRecordType::SOA => Some(Self(record_type)),
+            _ => None,
+        }
+    }
+
+    pub fn value(&self) -> u16 {
+        self.0.value()
+    }
+
+    pub fn into_inner(self) -> DnsRecordType {
+        self.0
+    }
+}
+
+// Implement necessary trait derivations
+impl From<QueryType> for DnsRecordType {
+    fn from(qt: QueryType) -> Self {
+        qt.0
     }
 }
 
