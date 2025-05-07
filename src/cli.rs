@@ -135,9 +135,13 @@ pub async fn start() -> Result<()> {
 
                     let elapsed = query_start_time.elapsed().as_millis();
 
-                    let output = response
-                        .format_output()
-                        .unwrap_or("Error: Could not render response".to_string());
+                    let output = match response.format_output() {
+                        Ok(output) => output,
+                        Err(err) => {
+                            println!("Error: {err}");
+                            return;
+                        }
+                    };
 
                     let records_len = response.answer.len();
                     let provider = config.get_active_provider();

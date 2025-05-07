@@ -12,7 +12,7 @@ name = "Google"
 modes = [{ name = "Standard", ip = "8.8.8.8" }]
 url = "https://{ip}/resolve"
 
-[[providers]]
-name = "Quad9"
-modes = [{ name = "Standard", ip = "9.9.9.9" }]
-url = "https://{ip}:5053/dns-query"
+# [[providers]]
+# name = "Quad9"
+# modes = [{ name = "Standard", ip = "9.9.9.9" }]
+# url = "https://{ip}:5053/dns-query"

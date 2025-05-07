@@ -1,8 +1,7 @@
 # Configuration file used in development
 
-version = 2
-scope = "Local"
 address = "127.0.0.1:5053"
+scope = "Local"
 log_queries = false
 
 [resolver]
