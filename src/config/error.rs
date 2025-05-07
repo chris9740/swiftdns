@@ -1,12 +1,19 @@
-use std::fmt;
-
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
+    #[error("IO error: {0}")]
     IoError(std::io::Error),
+    #[error("Address parse error: {0}")]
     AddrParseError(std::net::AddrParseError),
+    #[error("Configuration error: {0}")]
     ConfyError(confy::ConfyError),
+    #[error("Invalid mode `{0}`")]
     InvalidMode(String),
+    #[error("Invalid scope `{0}`")]
     InvalidScope(String),
+    #[error("Invalid provider '{0}'. Valid providers are: {1}")]
+    InvalidProvider(String, String),
+    #[error("Invalid mode '{1}' for provider '{0}'. Valid modes are: {2}")]
+    InvalidProviderMode(String, String, String),
 }
 
 impl From<std::io::Error> for ConfigError {
@@ -24,29 +31,5 @@ impl From<std::net::AddrParseError> for ConfigError {
 impl From<confy::ConfyError> for ConfigError {
     fn from(error: confy::ConfyError) -> Self {
         ConfigError::ConfyError(error)
-    }
-}
-
-impl fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ConfigError::IoError(e) => write!(f, "IO error: {}", e),
-            ConfigError::AddrParseError(e) => write!(f, "Address parse error: {}", e),
-            ConfigError::ConfyError(e) => write!(f, "Configuration error: {}", e),
-            ConfigError::InvalidMode(mode) => write!(f, "Invalid mode `{}`", mode),
-            ConfigError::InvalidScope(scope) => write!(f, "Invalid scope `{}`", scope),
-        }
-    }
-}
-
-impl std::error::Error for ConfigError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            ConfigError::IoError(e) => Some(e),
-            ConfigError::AddrParseError(e) => Some(e),
-            ConfigError::ConfyError(e) => Some(e),
-            ConfigError::InvalidMode(_) => None,
-            ConfigError::InvalidScope(_) => None,
-        }
     }
 }

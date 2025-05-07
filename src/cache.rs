@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use chrono::{DateTime, Duration, Local};
 use dns_message_parser::question::Question;
 
-use crate::dns::resolver::ApiResponse;
+use crate::dns::message_types::DnsJsonResponse;
 
 #[derive(Clone)]
 pub struct CacheEntry {
     pub expires_at: DateTime<Local>,
-    pub response: ApiResponse,
+    pub response: DnsJsonResponse,
 }
 
 pub struct Cache {
@@ -28,7 +28,7 @@ impl Cache {
         Cache { hash_map }
     }
 
-    pub fn set(&mut self, question: Question, response: ApiResponse) {
+    pub fn set(&mut self, question: Question, response: DnsJsonResponse) {
         let ttl = response
             .answer
             .iter()

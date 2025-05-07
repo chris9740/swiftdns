@@ -1,10 +1,13 @@
 # Configuration file used in development
 
 version = 2
-mode = "Standard"
 scope = "Local"
 address = "127.0.0.1:5053"
 log_queries = false
+
+[resolver]
+provider = "Cloudflare"
+mode = "Clean"
 
 [tor]
 enabled = false

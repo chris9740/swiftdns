@@ -140,8 +140,9 @@ pub async fn start() -> Result<()> {
                         .unwrap_or("Error: Could not render response".to_string());
 
                     let records_len = response.answer.len();
+                    let provider = config.get_active_provider();
 
-                    println!("Upstream DNS: Cloudflare ({})", config.mode.ip_address());
+                    println!("Upstream DNS: {} ({})", provider.0, provider.1);
                     println!();
                     println!("{output}");
                     println!(

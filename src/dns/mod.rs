@@ -1,57 +1,61 @@
 use dns_message_parser::{rr::RR, DecodeError, Dns, EncodeError, Flags};
+use message_types::DnsJsonAnswer;
 
-use self::resolver::{ApiAnswer, RecordType};
+use self::resolver::RecordType;
 
+pub mod message_types;
+pub mod provider;
 pub mod resolver;
 
-pub fn encode(query: Dns) -> Result<bytes::BytesMut, EncodeError> {
-    Dns::encode(&Dns {
-        id: query.id,
-        flags: Flags {
-            qr: true,
-            opcode: query.flags.opcode,
-            aa: false,
-            tc: query.flags.tc,       // echo this from CF
-            rd: query.flags.rd,       // reflect query
-            ra: true,                 // reflect CF
-            ad: true,                 // reflect CF
-            cd: query.flags.cd,       // reflect query
-            rcode: query.flags.rcode, // reflect CF
-        },
-        additionals: query.additionals,
-        authorities: query.authorities,
-        questions: query.questions,
-        answers: query.answers,
-    })
+#[derive(Debug)]
+pub struct DnsEncoder;
+
+impl DnsEncoder {
+    pub fn encode_response(query: Dns) -> Result<bytes::BytesMut, EncodeError> {
+        let response = Dns {
+            id: query.id,
+            flags: Self::construct_response_flags(&query.flags),
+            additionals: query.additionals,
+            authorities: query.authorities,
+            questions: query.questions,
+            answers: query.answers,
+        };
+
+        Dns::encode(&response)
+    }
+
+    fn construct_response_flags(query_flags: &Flags) -> Flags {
+        Flags {
+            qr: true,                   // Always true for responses
+            opcode: query_flags.opcode, // Reflect query opcode
+            aa: false,                  // Not authoritative
+            tc: false,                  // No truncation by default
+            rd: query_flags.rd,         // Reflect recursion desired
+            ra: true,                   // Recursion available
+            ad: false,                  // No DNSSEC validation
+            cd: query_flags.cd,         // Reflect checking disabled
+            rcode: query_flags.rcode,   // Reflect response code
+        }
+    }
 }
 
 pub fn decode(query_bytes: &[u8]) -> Result<Dns, DecodeError> {
-    let bytes = Vec::from(query_bytes);
-
-    Dns::decode(bytes.into())
+    Dns::decode(Vec::from(query_bytes).into())
 }
 
-pub fn map_answers(answers: &Vec<ApiAnswer>) -> Vec<RR> {
-    let mut group = Vec::new();
-
-    for answer in answers {
-        match RecordType::from_u16(answer.rtype) {
-            Some(record_type) => {
-                //if let Ok(rr) = record_type.construct_rr(answer) {
-                //    group.push(rr);
-                //}
-
-                match record_type.construct_rr(answer) {
-                    Ok(rr) => group.push(rr),
-                    Err(err) => {
+pub fn map_answers(answers: &[DnsJsonAnswer]) -> Vec<RR> {
+    answers
+        .iter()
+        .filter_map(|answer| {
+            RecordType::from_u16(answer.rtype).and_then(|record_type| {
+                record_type
+                    .construct_rr(answer)
+                    .map_err(|err| {
                         eprintln!("Failed to construct RR: {:?}", err);
-                        continue;
-                    }
-                }
-            }
-            None => continue,
-        }
-    }
-
-    group
+                        err
+                    })
+                    .ok()
+            })
+        })
+        .collect()
 }

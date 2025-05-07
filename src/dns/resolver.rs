@@ -1,22 +1,23 @@
-use anyhow::{Context, Result};
-use colored::Colorize;
+use anyhow::Result;
 use dns_message_parser::{
     question::Question,
     rr::{self, Class, NonEmptyVec, RR},
     DomainName,
 };
-use serde::Deserialize;
 use std::{
     error::Error,
     fmt::Display,
-    io::Write,
     net::{Ipv4Addr, Ipv6Addr},
     str::FromStr,
 };
 use strum::{EnumIter, IntoEnumIterator};
-use tabwriter::TabWriter;
 
-use crate::{config::SwiftConfig, domain::Domain, http};
+use crate::{config::SwiftConfig, http};
+
+use super::{
+    message_types::{DnsJsonAnswer, DnsJsonResponse},
+    provider,
+};
 
 #[derive(Debug, EnumIter, Clone, Eq, Hash, PartialEq)]
 #[allow(clippy::upper_case_acronyms)]
@@ -49,7 +50,7 @@ impl RecordType {
         RecordType::iter().find(|r| r.value() == value)
     }
 
-    pub fn construct_rr(&self, answer: &ApiAnswer) -> Result<RR, Box<dyn Error>> {
+    pub fn construct_rr(&self, answer: &DnsJsonAnswer) -> Result<RR, Box<dyn Error>> {
         let domain_name: DomainName = answer.name.name().parse()?;
         let ttl = answer.ttl;
         let class = Class::IN;
@@ -238,102 +239,13 @@ impl Display for RecordType {
     }
 }
 
-#[derive(Deserialize, Debug, Clone)]
-#[serde(rename_all = "PascalCase")]
-pub struct ApiResponse {
-    pub status: u8,
-    #[serde(rename = "TC")]
-    pub tc: bool,
-    #[serde(rename = "RD")]
-    pub rd: bool,
-    #[serde(rename = "RA")]
-    pub ra: bool,
-    #[serde(rename = "AD")]
-    pub ad: bool,
-    #[serde(rename = "CD")]
-    pub cd: bool,
-    pub question: Option<Vec<ApiQuestion>>,
-    #[serde(default)]
-    pub answer: Vec<ApiAnswer>,
-    pub authority: Option<Vec<ApiAnswer>>,
-}
-
-impl ApiResponse {
-    pub fn format_output(&self) -> Result<String> {
-        let mut tw = TabWriter::new(vec![]);
-        let headers = vec!["domain", "type", "ttl", "data"];
-
-        writeln!(tw, "{}", headers.join("\t"))?;
-
-        for record in &self.answer {
-            let record_type = RecordType::from_u16(record.rtype).context("Unknown record type")?;
-
-            write!(tw, "{}\t", record.name.to_unicode())?;
-            write!(tw, "{} ({})\t", record_type, record_type.value())?;
-            write!(tw, "{}\t", record.ttl)?;
-            write!(tw, "{}", record.data)?;
-            writeln!(tw)?;
-        }
-
-        tw.flush()?;
-
-        let formatted = String::from_utf8(tw.into_inner()?)?;
-        let mut output_splitter = formatted.splitn(2, '\n');
-        let mut header_line: String = output_splitter.next().unwrap_or("").to_string();
-        let remaining: String = output_splitter.next().unwrap_or("").to_string();
-
-        for item in headers {
-            header_line =
-                header_line.replace(item, &item.on_truecolor(190, 190, 190).black().to_string());
-        }
-
-        Ok(format!("{header_line}\n{remaining}"))
-    }
-}
-
-#[derive(Deserialize, Debug, Clone)]
-pub struct ApiAnswer {
-    pub name: Domain,
-    #[serde(rename = "type")]
-    pub rtype: u16,
-    #[serde(rename = "TTL")]
-    pub ttl: u32,
-    pub data: String,
-}
-
-#[derive(Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
-pub struct ApiQuestion {
-    pub name: String,
-    #[serde(rename = "type")]
-    pub qtype: u16,
-}
-
 pub async fn resolve(
     client: &mut http::Client,
     config: &SwiftConfig,
     question: &Question,
-) -> Result<ApiResponse> {
-    let resolver_ip = config.mode.ip_address();
+) -> Result<DnsJsonResponse> {
+    let provider = config.get_active_provider();
+    let provider = provider::get_provider(provider.0).expect("Provider not found");
 
-    let url = format!(
-        "https://{}/dns-query?name={}&type={}",
-        resolver_ip, question.domain_name, question.q_type
-    );
-
-    let res = client
-        .get(&url)
-        .await?
-        .header(reqwest::header::ACCEPT, "application/dns-json")
-        .send()
-        .await?;
-
-    let status = res.status();
-
-    if status == reqwest::StatusCode::BAD_REQUEST {
-        anyhow::bail!("Bad request");
-    }
-
-    let dns_response = res.json::<ApiResponse>().await?;
-
-    Ok(dns_response)
+    provider::query(client, provider, question, config).await
 }

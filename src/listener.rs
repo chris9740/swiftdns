@@ -12,7 +12,7 @@ use crate::{
     cache::Cache,
     config::{Scope, SwiftConfig},
     db::create_conn,
-    dns,
+    dns::{self, DnsEncoder},
     domain::Domain,
     filter,
     http::Client,
@@ -143,7 +143,8 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
         match dns::decode(&buf[..amt]) {
             Ok(query) => match handle_query(&conn, &query, &mut client, config, &mut cache).await {
                 Ok(response) => {
-                    socket.send_to(&dns::encode(response)?, src)?;
+                    let response_bytes = DnsEncoder::encode_response(response)?;
+                    socket.send_to(&response_bytes, src)?;
                 }
                 Err(why) => {
                     eprintln!("There was an error while resolving: {}", why);
