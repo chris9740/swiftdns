@@ -54,8 +54,11 @@ pub async fn query(
             ))
         })?;
 
-    let url = provider.url.replace("{ip}", &mode.ip);
-    let url = format!("{}?name={}&type={}", url, question.name, question.qtype);
+    let url = provider
+        .url
+        .replace("{ip}", &mode.ip)
+        .replace("{name}", &question.name)
+        .replace("{type}", &question.qtype.to_string());
 
     let res = client
         .get(&url)

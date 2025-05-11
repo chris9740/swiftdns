@@ -5,12 +5,12 @@ modes = [
     { name = "Safe", ip = "1.1.1.2" },
     { name = "Clean", ip = "1.1.1.3" },
 ]
-url = "https://{ip}/dns-query"
+url = "https://{ip}/dns-query?name={name}&type={type}"
 
 [[providers]]
 name = "Google"
 modes = [{ name = "Standard", ip = "8.8.8.8" }]
-url = "https://{ip}/resolve"
+url = "https://{ip}/resolve?name={name}&type={type}"
 
 # [[providers]]
 # name = "Quad9"
