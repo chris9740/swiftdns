@@ -47,11 +47,7 @@ impl DomainTestResult {
             .min_ttl
             .map(|t| t.to_string())
             .unwrap_or_else(|| "-".to_string());
-        let first = self
-            .first_answer
-            .as_ref()
-            .map(|s| s.as_str())
-            .unwrap_or("-");
+        let first = self.first_answer.as_deref().unwrap_or("-");
         format!(
             "{:<20} {:>6}   {:>2} ans    ttl={:<3}   {}",
             self.domain, time, self.answer_count, ttl, first
@@ -106,7 +102,7 @@ pub async fn execute(args: CheckArgs, config: &mut SwiftConfig) -> Result<()> {
     for (i, provider_name) in provider_names.iter().enumerate() {
         if let Some(provider) = provider::get_provider(provider_name) {
             print_provider_header(&provider.name)?;
-            test_provider(&mut client, &provider, &test_domains, config).await?;
+            test_provider(&mut client, provider, &test_domains, config).await?;
 
             if i < provider_names.len() - 1 || args.tor {
                 println!("\n");
@@ -184,7 +180,7 @@ async fn test_provider(
 
                 let answer_count = res.answer.len();
                 let min_ttl = res.answer.iter().map(|r| r.ttl).min();
-                let first = res.answer.get(0).map(|r| r.data.clone());
+                let first = res.answer.first().map(|r| r.data.clone());
 
                 DomainTestResult {
                     domain: domain.to_string(),
@@ -202,7 +198,7 @@ async fn test_provider(
                     response_time: Some(elapsed),
                     answer_count: res.answer.len(),
                     min_ttl: res.answer.iter().map(|r| r.ttl).min(),
-                    first_answer: res.answer.get(0).map(|r| r.data.clone()),
+                    first_answer: res.answer.first().map(|r| r.data.clone()),
                     status: TestStatus::Error,
                 }
             }
@@ -260,7 +256,7 @@ async fn test_tor(config: &mut SwiftConfig) -> Result<()> {
     execute!(
         stdout,
         SetForegroundColor(Color::Grey),
-        Print(format!(" Tor Connectivity Test\n\n").bold()),
+        Print(" Tor Connectivity Test\n\n".bold()),
         ResetColor
     )?;
 
@@ -299,7 +295,7 @@ async fn test_tor(config: &mut SwiftConfig) -> Result<()> {
                 response_time: Some(elapsed),
                 answer_count: res.answer.len(),
                 min_ttl: res.answer.iter().map(|r| r.ttl).min(),
-                first_answer: res.answer.get(0).map(|r| r.data.clone()),
+                first_answer: res.answer.first().map(|r| r.data.clone()),
             };
 
             execute!(
@@ -318,7 +314,7 @@ async fn test_tor(config: &mut SwiftConfig) -> Result<()> {
                 stdout,
                 Print("\n"),
                 SetForegroundColor(Color::Grey),
-                Print(format!("  ▶ Tor connectivity test successful\n")),
+                Print("  ▶ Tor connectivity test successful\n"),
                 ResetColor
             )?;
         }
@@ -330,7 +326,7 @@ async fn test_tor(config: &mut SwiftConfig) -> Result<()> {
                 response_time: Some(elapsed),
                 answer_count: res.answer.len(),
                 min_ttl: res.answer.iter().map(|r| r.ttl).min(),
-                first_answer: res.answer.get(0).map(|r| r.data.clone()),
+                first_answer: res.answer.first().map(|r| r.data.clone()),
             };
 
             execute!(
@@ -351,7 +347,7 @@ async fn test_tor(config: &mut SwiftConfig) -> Result<()> {
                 SetForegroundColor(Color::Red),
                 Print("  ●"),
                 SetForegroundColor(Color::Grey),
-                Print(format!(" Tor connectivity test failed")),
+                Print(" Tor connectivity test failed"),
                 ResetColor
             )?;
         }

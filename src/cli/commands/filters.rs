@@ -35,10 +35,10 @@ pub async fn execute() -> Result<()> {
         let filter_name = v.into_iter().collect::<String>();
 
         println!(
-            " {}) {} {}",
+            " {}) {} ({})",
             index + 1,
             filter_name,
-            format!("({})", relative_path.display().to_string().italic())
+            relative_path.display().to_string().italic()
         );
     }
 

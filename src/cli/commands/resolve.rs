@@ -83,7 +83,5 @@ pub async fn execute(args: ResolveArgs, config: &mut SwiftConfig) -> Result<()> 
                     "records"
                 }
             );
-
-            ()
         })?)
 }
