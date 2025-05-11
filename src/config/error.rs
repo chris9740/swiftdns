@@ -1,35 +1,26 @@
-#[derive(Debug, thiserror::Error)]
+use std::path::PathBuf;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
 pub enum ConfigError {
-    #[error("IO error: {0}")]
-    IoError(std::io::Error),
-    #[error("Address parse error: {0}")]
-    AddrParseError(std::net::AddrParseError),
-    #[error("Configuration error: {0}")]
-    ConfyError(confy::ConfyError),
-    #[error("Invalid mode `{0}`")]
-    InvalidMode(String),
-    #[error("Invalid scope `{0}`")]
-    InvalidScope(String),
+    #[error("Failed to read config file {0}: {1}")]
+    IoError(PathBuf, std::io::Error),
+
+    #[error("Failed to deserialize config file {0}: {1}")]
+    DeserializeError(PathBuf, toml::de::Error),
+
+    #[error("Failed to serialize config file {0}: {1}")]
+    SerializeError(PathBuf, toml::ser::Error),
+
     #[error("Invalid provider '{0}'. Valid providers are: {1}")]
     InvalidProvider(String, String),
+
     #[error("Invalid mode '{1}' for provider '{0}'. Valid modes are: {2}")]
     InvalidProviderMode(String, String, String),
-}
 
-impl From<std::io::Error> for ConfigError {
-    fn from(error: std::io::Error) -> Self {
-        ConfigError::IoError(error)
-    }
-}
+    #[error("Invalid scope: {0}")]
+    InvalidScope(String),
 
-impl From<std::net::AddrParseError> for ConfigError {
-    fn from(error: std::net::AddrParseError) -> Self {
-        ConfigError::AddrParseError(error)
-    }
-}
-
-impl From<confy::ConfyError> for ConfigError {
-    fn from(error: confy::ConfyError) -> Self {
-        ConfigError::ConfyError(error)
-    }
+    #[error("Invalid socket address: {0}")]
+    AddrParseError(#[from] std::net::AddrParseError),
 }

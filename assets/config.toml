@@ -1,11 +1,12 @@
 # Configuration file used in development
 
-address = "127.0.0.1:5053"
 scope = "Local"
+address = "127.0.0.1:5053"
 
 [resolver]
 provider = "Cloudflare"
-mode = "Clean"
+mode = "Standard"
 
 [tor]
 enabled = false
+address = "127.0.0.1:9050"

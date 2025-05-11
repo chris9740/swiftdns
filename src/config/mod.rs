@@ -150,7 +150,17 @@ impl SwiftConfig {
 
 pub fn get_config() -> Result<SwiftConfig, ConfigError> {
     let config_path = get_config_path().join("config.toml");
-    let config = confy::load_path::<SwiftConfig>(config_path).map_err(ConfigError::from)?;
+
+    if !config_path.exists() {
+        create_default_config(&config_path)?;
+    }
+
+    let config_str = std::fs::read_to_string(&config_path)
+        .map_err(|e| ConfigError::IoError(config_path.clone(), e))?;
+
+    let config: SwiftConfig = toml::from_str(&config_str)
+        .map_err(|e| ConfigError::DeserializeError(config_path.clone(), e))?;
+
     config.validate()?;
     Ok(config)
 }
@@ -163,4 +173,19 @@ pub fn get_config_path() -> PathBuf {
     } else {
         Path::new("/etc/swiftdns/").to_path_buf()
     }
+}
+
+pub fn create_default_config(path: &Path) -> Result<(), ConfigError> {
+    let config = SwiftConfig::default();
+    let toml_string = toml::to_string_pretty(&config)
+        .map_err(|e| ConfigError::SerializeError(path.to_path_buf(), e))?;
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| ConfigError::IoError(parent.to_path_buf(), e))?;
+    }
+
+    std::fs::write(path, toml_string).map_err(|e| ConfigError::IoError(path.to_path_buf(), e))?;
+
+    Ok(())
 }
