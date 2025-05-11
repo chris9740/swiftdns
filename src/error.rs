@@ -22,4 +22,7 @@ pub enum DnsError {
 
     #[error("Database error: {0}")]
     DatabaseError(String),
+
+    #[error("Invalid record type: {0}")]
+    InvalidRecordType(String),
 }

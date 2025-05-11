@@ -17,6 +17,8 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    #[command(about = "Check DNS resolver health and performance")]
+    Check(commands::check::CheckArgs),
     #[command(about = "Start the DNS listener")]
     Start(commands::start::StartArgs),
     #[command(about = "Resolve a domain name")]
@@ -32,6 +34,7 @@ pub async fn start() -> Result<()> {
     crate::filter::migrate_filters()?;
 
     match args.command {
+        Commands::Check(args) => commands::check::execute(args, &mut config).await,
         Commands::Start(args) => commands::start::execute(args, &mut config).await,
         Commands::Resolve(args) => commands::resolve::execute(args, &mut config).await,
         Commands::ListFilters => commands::filters::execute().await,

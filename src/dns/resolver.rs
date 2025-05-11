@@ -15,7 +15,7 @@ use strum::{EnumIter, IntoEnumIterator};
 use crate::{config::SwiftConfig, error::DnsError, http};
 
 use super::{
-    message_types::{DnsJsonAnswer, DnsJsonResponse},
+    message_types::{DnsJsonAnswer, DnsJsonQuestion, DnsJsonResponse},
     provider,
 };
 
@@ -231,5 +231,19 @@ pub async fn resolve(
     let provider = config.get_active_provider();
     let provider = provider::get_provider(provider.0).expect("Provider not found");
 
-    provider::query(client, provider, question, config).await
+    provider::query(
+        client,
+        provider,
+        &DnsJsonQuestion {
+            name: question.domain_name.to_string(),
+            qtype: question
+                .q_type
+                .to_string()
+                .parse::<DnsRecordType>()
+                .map_err(|_| DnsError::InvalidRecordType(question.q_type.to_string()))?
+                .value(),
+        },
+        config,
+    )
+    .await
 }

@@ -1,12 +1,11 @@
 use anyhow::Result;
-use dns_message_parser::question::Question;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use std::collections::HashMap;
 
 use crate::{config::SwiftConfig, error::DnsError, http};
 
-use super::message_types::DnsJsonResponse;
+use super::message_types::{DnsJsonQuestion, DnsJsonResponse};
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ProviderMode {
@@ -41,7 +40,7 @@ static PROVIDERS: Lazy<HashMap<String, Provider>> = Lazy::new(|| {
 pub async fn query(
     client: &mut http::Client,
     provider: &Provider,
-    question: &Question,
+    question: &DnsJsonQuestion,
     config: &SwiftConfig,
 ) -> Result<DnsJsonResponse, DnsError> {
     let mode = provider
@@ -56,10 +55,7 @@ pub async fn query(
         })?;
 
     let url = provider.url.replace("{ip}", &mode.ip);
-    let url = format!(
-        "{}?name={}&type={}",
-        url, question.domain_name, question.q_type
-    );
+    let url = format!("{}?name={}&type={}", url, question.name, question.qtype);
 
     let res = client
         .get(&url)

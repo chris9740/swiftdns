@@ -45,7 +45,7 @@ impl Mode {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TorConfig {
     pub enabled: bool,
     pub address: Option<String>,
@@ -64,13 +64,13 @@ impl TorConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResolverConfig {
     pub provider: String,
     pub mode: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SwiftConfig {
     pub scope: Option<Scope>,
     pub address: SocketAddr,
