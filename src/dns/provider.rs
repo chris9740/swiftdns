@@ -11,6 +11,7 @@ use super::message_types::{DnsJsonQuestion, DnsJsonResponse};
 pub struct ProviderMode {
     pub name: String,
     pub ip: String,
+    pub sni: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -60,11 +61,20 @@ pub async fn query(
         .replace("{name}", &question.name)
         .replace("{type}", &question.qtype.to_string());
 
-    let res = client
+    let request = client
         .get(&url)
         .await
         .map_err(|e| DnsError::NetworkError(format!("Failed to send request: {}", e)))?
         .header(reqwest::header::ACCEPT, "application/dns-json")
+        .header(
+            reqwest::header::USER_AGENT,
+            format!("SwiftDNS/{}", env!("CARGO_PKG_VERSION")),
+        )
+        .header(reqwest::header::HOST, mode.sni.as_deref().unwrap_or(""));
+
+    dbg!(&request);
+
+    let res = request
         .send()
         .await
         .map_err(|e| DnsError::NetworkError(format!("Failed to send request: {}", e)))?;

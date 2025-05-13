@@ -1,7 +1,8 @@
-use std::net::SocketAddr;
-
 use anyhow::{Context, Result};
 use reqwest::{IntoUrl, Proxy, RequestBuilder};
+use rustls_native_certs::load_native_certs;
+use std::net::SocketAddr;
+use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 
 use crate::config::SwiftConfig;
 
@@ -17,24 +18,44 @@ pub struct Client {
 
 impl Client {
     pub fn create(config: &SwiftConfig) -> Result<Self> {
-        let client = if config.tor.enabled {
+        let mut root_store = RootCertStore::empty();
+
+        for cert in load_native_certs()? {
+            root_store
+                .add(&tokio_rustls::rustls::Certificate(cert.0))
+                .context("Failed to add native certificate")?;
+        }
+
+        let tls_config = ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
+
+        let mut client_builder = reqwest::Client::builder()
+            .use_preconfigured_tls(tls_config)
+            .resolve_to_addrs(
+                "dns.nextdns.io",
+                &[
+                    "45.90.28.0:443".parse().unwrap(),
+                    "45.90.30.0:443".parse().unwrap(),
+                ],
+            );
+
+        if config.tor.enabled {
             let tor_address: SocketAddr = config
                 .tor
                 .get_address()
                 .context("Failed to get Tor proxy address")?;
-
             let proxy = Proxy::all(format!("socks5h://{tor_address}"))
                 .context("Failed to configure proxy")?;
+            client_builder = client_builder.proxy(proxy);
+        }
 
-            reqwest::Client::builder()
-                .proxy(proxy)
-                .build()
-                .context("Client should have valid configuration")?
-        } else {
-            reqwest::Client::new()
-        };
+        let client = client_builder
+            .build()
+            .context("Failed to build HTTP client")?;
 
-        Ok(Client {
+        Ok(Self {
             client,
             state: if config.tor.enabled {
                 ClientState::NeedsValidation
@@ -51,7 +72,6 @@ impl Client {
         if let ClientState::NeedsValidation = self.state {
             self.validate().await?;
         }
-
         Ok(self.client.get(url))
     }
 
@@ -60,7 +80,6 @@ impl Client {
             tor::proxy::validate(&self.client).await?;
             self.state = ClientState::Ready;
         }
-
         Ok(())
     }
 }
