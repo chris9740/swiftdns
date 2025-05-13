@@ -56,10 +56,7 @@ async fn handle_query(
     } else {
         dns::resolver::resolve(client, config, question)
             .await
-            .map_err(|e| {
-                dbg!(&e);
-                DnsError::ProviderError(e.to_string())
-            })?
+            .map_err(|e| DnsError::ProviderError(e.to_string()))?
     };
 
     let rcode = ok_or_rcode!(

@@ -72,8 +72,6 @@ pub async fn query(
         )
         .header(reqwest::header::HOST, mode.sni.as_deref().unwrap_or(""));
 
-    dbg!(&request);
-
     let res = request
         .send()
         .await

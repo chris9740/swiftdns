@@ -240,10 +240,7 @@ pub async fn resolve(
                 .q_type
                 .to_string()
                 .parse::<DnsRecordType>()
-                .map_err(|_| {
-                    dbg!(&question);
-                    DnsError::InvalidRecordType(question.q_type.to_string())
-                })?
+                .map_err(|_| DnsError::InvalidRecordType(question.q_type.to_string()))?
                 .value(),
         },
         config,
