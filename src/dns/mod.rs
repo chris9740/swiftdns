@@ -6,7 +6,6 @@ use crate::error::DnsError;
 use self::resolver::DnsRecordType;
 
 pub mod message_types;
-pub mod provider;
 pub mod resolver;
 
 #[derive(Debug)]

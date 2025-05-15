@@ -4,12 +4,12 @@ use std::{
 };
 
 use anyhow::Result;
-use dns_message_parser::{Dns, Flags, RCode};
+use dns_message_parser::{question::QType, Dns, Flags, RCode};
 
 use crate::{
     cache::Cache,
     config::{Scope, SwiftConfig},
-    dns::{self, DnsEncoder},
+    dns::{self, message_types::DnsJsonQuestion, DnsEncoder},
     domain::Domain,
     error::DnsError,
     filter,
@@ -54,9 +54,25 @@ async fn handle_query(
     let api_response = if let Some(cached) = cached.clone() {
         cached.response
     } else {
-        dns::resolver::resolve(client, config, question)
-            .await
-            .map_err(|e| DnsError::ProviderError(e.to_string()))?
+        dns::resolver::resolve(
+            client,
+            config,
+            &DnsJsonQuestion {
+                name: question.domain_name.to_string(),
+                qtype: match question.q_type {
+                    QType::A => dns::resolver::DnsRecordType::A,
+                    QType::AAAA => dns::resolver::DnsRecordType::AAAA,
+                    QType::CNAME => dns::resolver::DnsRecordType::CNAME,
+                    QType::MX => dns::resolver::DnsRecordType::MX,
+                    QType::TXT => dns::resolver::DnsRecordType::TXT,
+                    QType::SOA => dns::resolver::DnsRecordType::SOA,
+                    _ => dns::resolver::DnsRecordType::ANY,
+                }
+                .value(),
+            },
+        )
+        .await
+        .map_err(|e| DnsError::ProviderError(e.to_string()))?
     };
 
     let rcode = ok_or_rcode!(
@@ -65,7 +81,7 @@ async fn handle_query(
         RCode::ServFail
     );
 
-    if cached.is_none() {
+    if cached.is_none() && !api_response.answer.is_empty() {
         cache.set(question.clone(), api_response.clone())?;
     }
 

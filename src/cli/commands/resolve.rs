@@ -1,11 +1,10 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use clap::Args;
-use dns_message_parser::question::{QClass, QType, Question};
 use std::time::Instant;
 
 use crate::{
     config::SwiftConfig,
-    dns::{self, resolver::DnsRecordType},
+    dns::{self, message_types::DnsJsonQuestion, resolver::DnsRecordType},
     domain::Domain,
     filter,
     http::Client,
@@ -49,39 +48,46 @@ pub async fn execute(args: ResolveArgs, config: &mut SwiftConfig) -> Result<()> 
 
     let query_start_time = Instant::now();
 
-    let question = Question {
-        domain_name: name.parse()?,
-        q_class: QClass::IN,
-        q_type: QType::try_from(args.qtype.value())
-            .map_err(|value| anyhow!("Failed to parse question type from value: {value}"))?,
+    let question = DnsJsonQuestion {
+        name: args.domain.name().to_string(),
+        qtype: args.qtype.value(),
     };
 
     Ok(dns::resolver::resolve(&mut client, config, &question)
         .await
-        .map(|response| {
-            if response.answer.is_empty() {
-                println!("{}: No DNS records found", args.domain);
-                return;
-            }
-
-            let elapsed = query_start_time.elapsed().as_millis();
-            let output = response.format_output().unwrap_or_else(|err| {
+        .map_or_else(
+            |err| {
                 println!("Error: {err}");
-                String::new()
-            });
-            let records_len = response.answer.len();
-            let provider = config.get_active_provider();
-
-            println!("Upstream DNS: {} ({})", provider.0, provider.1);
-            println!();
-            println!("{output}");
-            println!(
-                "({records_len} {} found, query time: {elapsed}ms)",
-                if records_len == 1 {
-                    "record"
-                } else {
-                    "records"
+                Err(err)
+            },
+            |response| {
+                if response.answer.is_empty() {
+                    println!("{}: No DNS records found", args.domain);
+                    return Ok(());
                 }
-            );
-        })?)
+
+                let elapsed = query_start_time.elapsed().as_millis();
+                let output = response.format_output().unwrap_or_else(|err| {
+                    println!("Error: {err}");
+                    String::new()
+                });
+                let records_len = response.answer.len();
+
+                let url = url::Url::parse(&config.resolver.url)
+                    .expect("Resolver URL should have been validated earlier");
+
+                println!("Upstream DNS: {}", url.host_str().unwrap_or("unknown"));
+                println!();
+                println!("{output}");
+                println!(
+                    "({records_len} {} found, query time: {elapsed}ms)",
+                    if records_len == 1 {
+                        "record"
+                    } else {
+                        "records"
+                    }
+                );
+                Ok(())
+            },
+        )?)
 }

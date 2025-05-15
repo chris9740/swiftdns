@@ -2,6 +2,9 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum DnsError {
+    #[error("Invalid resolver URL: {0}")]
+    InvalidResolverUrl(String),
+
     #[error("DNS decode error: {0}")]
     DecodeError(#[from] dns_message_parser::DecodeError),
 
@@ -23,6 +26,6 @@ pub enum DnsError {
     #[error("Database error: {0}")]
     DatabaseError(String),
 
-    #[error("Invalid record type: {0}")]
-    InvalidRecordType(String),
+    #[error("Invalid query type: {0}")]
+    InvalidQueryType(String),
 }

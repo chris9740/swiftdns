@@ -31,15 +31,20 @@ impl Client {
             .with_root_certificates(root_store)
             .with_no_client_auth();
 
-        let mut client_builder = reqwest::Client::builder()
-            .use_preconfigured_tls(tls_config)
-            .resolve_to_addrs(
-                "dns.nextdns.io",
-                &[
-                    "45.90.28.0:443".parse().unwrap(),
-                    "45.90.30.0:443".parse().unwrap(),
-                ],
-            );
+        let mut client_builder = reqwest::Client::builder().use_preconfigured_tls(tls_config);
+
+        if let Some(bootstrap_ips) = &config.resolver.bootstrap_ips {
+            for ip in bootstrap_ips {
+                let url = url::Url::parse(&config.resolver.url)
+                    .context("Failed to parse resolver URL")?;
+
+                client_builder = client_builder.resolve_to_addrs(
+                    url.host_str()
+                        .context("Failed to get host from resolver URL")?,
+                    &[*ip],
+                );
+            }
+        }
 
         if config.tor.enabled {
             let tor_address: SocketAddr = config

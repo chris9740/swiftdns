@@ -1,8 +1,9 @@
 use anyhow::Result;
 use clap::Args;
+use colored::Colorize;
 use crossterm::{
     execute,
-    style::{Color, Print, ResetColor, SetForegroundColor, Stylize},
+    style::{Color, Print, ResetColor, SetForegroundColor},
 };
 use std::io::stdout;
 use std::{str::FromStr as _, time::Instant};
@@ -11,8 +12,7 @@ use crate::{
     config::SwiftConfig,
     dns::{
         message_types::DnsJsonQuestion,
-        provider::{self, Provider},
-        resolver::{DnsRecordType, QueryType},
+        resolver::{self, DnsRecordType, QueryType},
     },
     domain::Domain,
     http::Client,
@@ -97,20 +97,18 @@ pub async fn execute(args: CheckArgs, config: &mut SwiftConfig) -> Result<()> {
 
     let mut client = Client::create(config)?;
 
-    let provider_names = provider::get_valid_providers();
+    let resolver_url = url::Url::parse(&config.resolver.url)
+        .map_err(|_| anyhow::anyhow!("Invalid resolver URL"))?;
 
-    for (i, provider_name) in provider_names.iter().enumerate() {
-        if let Some(provider) = provider::get_provider(provider_name) {
-            print_provider_header(&provider.name)?;
-            test_provider(&mut client, provider, &test_domains, config).await?;
+    let mut header_url = resolver_url.clone();
+    header_url.set_query(None);
+    header_url.set_fragment(None);
 
-            if i < provider_names.len() - 1 || args.tor {
-                println!("\n");
-            }
-        }
-    }
+    print_resolver_header(header_url.as_ref())?;
+    test_resolver(&mut client, &test_domains, config).await?;
 
     if args.tor {
+        println!();
         test_tor(config).await?;
     }
 
@@ -119,12 +117,14 @@ pub async fn execute(args: CheckArgs, config: &mut SwiftConfig) -> Result<()> {
     Ok(())
 }
 
-fn print_provider_header(provider_name: &str) -> Result<()> {
+fn print_resolver_header(resolver_url: &str) -> Result<()> {
     let mut stdout = stdout();
+
     execute!(
         stdout,
         SetForegroundColor(Color::Grey),
-        Print(format!(" {} DNS Provider\n\n", provider_name).bold()),
+        Print("  "),
+        Print(format!("DNS Resolver Test - {}\n\n", resolver_url).underline()),
         ResetColor
     )?;
 
@@ -144,31 +144,22 @@ fn print_provider_header(provider_name: &str) -> Result<()> {
     Ok(())
 }
 
-async fn test_provider(
-    client: &mut Client,
-    provider: &Provider,
-    domains: &[&str],
-    config: &SwiftConfig,
-) -> Result<()> {
+async fn test_resolver(client: &mut Client, domains: &[&str], config: &SwiftConfig) -> Result<()> {
     let mut stdout = stdout();
     let mut total_time = 0u128;
     let mut successful = 0;
     let total = domains.len();
 
-    let mut cfg = config.clone();
-    cfg.resolver.mode = provider.modes[0].name.clone();
-
-    for &d in domains {
+    for d in domains {
         let domain = Domain::from_str(d)?;
         let start = Instant::now();
-        let raw = provider::query(
+        let raw = resolver::resolve(
             client,
-            provider,
+            config,
             &DnsJsonQuestion {
                 name: domain.to_string(),
                 qtype: QueryType::new(DnsRecordType::A).unwrap().value(),
             },
-            &cfg,
         )
         .await;
 
@@ -276,14 +267,13 @@ async fn test_tor(config: &mut SwiftConfig) -> Result<()> {
     let start = Instant::now();
     let test_domain = Domain::from_str("torproject.org")?;
 
-    match provider::query(
+    match resolver::resolve(
         &mut client,
-        provider::get_provider("Cloudflare").unwrap(),
+        config,
         &DnsJsonQuestion {
             name: test_domain.to_string(),
             qtype: QueryType::new(DnsRecordType::A).unwrap().value(),
         },
-        config,
     )
     .await
     {

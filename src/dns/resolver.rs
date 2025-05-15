@@ -1,6 +1,5 @@
 use anyhow::Result;
 use dns_message_parser::{
-    question::Question,
     rr::{self, Class, NonEmptyVec, RR},
     DomainName,
 };
@@ -14,10 +13,7 @@ use strum::{EnumIter, IntoEnumIterator};
 
 use crate::{config::SwiftConfig, error::DnsError, http};
 
-use super::{
-    message_types::{DnsJsonAnswer, DnsJsonQuestion, DnsJsonResponse},
-    provider,
-};
+use super::message_types::{DnsJsonAnswer, DnsJsonQuestion, DnsJsonResponse};
 
 #[derive(Debug, EnumIter, Clone, Copy, Eq, Hash, PartialEq)]
 #[allow(clippy::upper_case_acronyms)]
@@ -30,6 +26,7 @@ pub enum DnsRecordType {
     SRV = 33,
     SOA = 6,
     TXT = 16,
+    ANY = 255,
 }
 
 impl DnsRecordType {
@@ -161,6 +158,7 @@ impl DnsRecordType {
                     strings,
                 }))
             }
+            DnsRecordType::ANY => Err("ANY record type is not supported".into()),
         }
     }
 }
@@ -187,6 +185,7 @@ impl Display for DnsRecordType {
             Self::SRV => "SRV",
             Self::SOA => "SOA",
             Self::TXT => "TXT",
+            Self::ANY => "ANY",
         };
         f.write_str(str)
     }
@@ -226,24 +225,37 @@ impl From<QueryType> for DnsRecordType {
 pub async fn resolve(
     client: &mut http::Client,
     config: &SwiftConfig,
-    question: &Question,
+    question: &DnsJsonQuestion,
 ) -> Result<DnsJsonResponse, DnsError> {
-    let provider = config.get_active_provider();
-    let provider = provider::get_provider(provider.0).expect("Provider not found");
+    let url = url::Url::parse(&config.resolver.url)
+        .map_err(|_| DnsError::InvalidResolverUrl(config.resolver.url.clone()))?;
 
-    provider::query(
-        client,
-        provider,
-        &DnsJsonQuestion {
-            name: question.domain_name.to_string(),
-            qtype: question
-                .q_type
-                .to_string()
-                .parse::<DnsRecordType>()
-                .map_err(|_| DnsError::InvalidRecordType(question.q_type.to_string()))?
-                .value(),
-        },
-        config,
-    )
-    .await
+    let formatted_url = url
+        .as_str()
+        .replace("{name}", &question.name)
+        .replace("{type}", &question.qtype.to_string());
+
+    let request = client
+        .get(&formatted_url)
+        .await
+        .map_err(|e| DnsError::NetworkError(format!("Failed to send request: {}", e)))?
+        .header(reqwest::header::ACCEPT, "application/dns-json")
+        .header(
+            reqwest::header::USER_AGENT,
+            format!("SwiftDNS/{}", env!("CARGO_PKG_VERSION")),
+        )
+        .header(reqwest::header::HOST, url.host_str().unwrap_or(""));
+
+    let res = request
+        .send()
+        .await
+        .map_err(|e| DnsError::NetworkError(format!("Failed to send request: {}", e)))?;
+
+    if res.status() == reqwest::StatusCode::BAD_REQUEST {
+        return Err(DnsError::QueryError("Bad request".to_string()));
+    }
+
+    res.json()
+        .await
+        .map_err(|e| DnsError::NetworkError(format!("Failed to parse response: {}", e)))
 }

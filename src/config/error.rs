@@ -12,11 +12,14 @@ pub enum ConfigError {
     #[error("Failed to serialize config file {0}: {1}")]
     SerializeError(PathBuf, toml::ser::Error),
 
-    #[error("Invalid provider '{0}'. Valid providers are: {1}")]
-    InvalidProvider(String, String),
+    #[error("Invalid resolver scheme: {0}")]
+    InvalidResolverScheme(String),
 
-    #[error("Invalid mode '{1}' for provider '{0}'. Valid modes are: {2}")]
-    InvalidProviderMode(String, String, String),
+    #[error("Invalid resolver host: {0}")]
+    InvalidResolverHost(String),
+
+    #[error("Invalid resolver URL: {0}")]
+    InvalidResolverUrl(String),
 
     #[error("Invalid scope: {0}")]
     InvalidScope(String),

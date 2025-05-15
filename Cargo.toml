@@ -32,6 +32,7 @@ crossterm = "0.29.0"
 tokio-rustls = "0.24"
 rustls = "0.21"
 rustls-native-certs = "0.6"
+url = "2.5.4"
 
 [package.metadata.deb]
 maintainer-scripts = "debian/"

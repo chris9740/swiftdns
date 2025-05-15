@@ -4,7 +4,7 @@ Swiftdns is a local forwarding DNS resolver tailored for Debian distributions, w
 
 ## Project
 
-Swiftdns enhances your browsing security by seamlessly integrating DNS over HTTPS (DoH) with your local system's existing UDP-based DNS queries. Unlike traditional DNS queries that are visible to ISPs, DoH encrypts your requests, ensuring that the domains you access remain confidential between you and Cloudflare. This setup allows you to take full advantage of Cloudflare's DoH without any complex configuration. Swiftdns operates quietly in the background, ensuring your DNS queries are both secure and private, with minimal configuration effort on your part.
+Swiftdns enhances your browsing security by seamlessly integrating DNS over HTTPS (DoH) with your local system's existing UDP-based DNS queries. Unlike traditional DNS queries that are visible to ISPs, DoH encrypts your requests, ensuring that the domains you access remain confidential between you and your chosen DNS provider. This setup allows you to take full advantage of secure DNS resolution without any complex configuration. Swiftdns operates quietly in the background, ensuring your DNS queries are both secure and private, with minimal configuration effort on your part.
 
 For those seeking an extra layer of privacy, Swiftdns also offers the option to route queries through a Tor proxy.
 
@@ -30,6 +30,8 @@ Don't forget to configure your computer to use Swiftdns as a resolver.
 [Whitelisting](#whitelisting) - Exempt certain domains from being flagged by the blacklist. This can be used if you want to block e.g., `googleapis.com` and all its subdomains except for `discord-attachments-uploads-prd.storage.googleapis.com`.
 
 [Tor Proxy](#tor) - Route all DNS queries through Tor.
+
+[Custom Resolvers](#configuration) - Configure any DoH provider of your choice, with support for bootstrapping IP addresses to avoid circular DNS dependencies.
 
 ## Blacklisting
 
@@ -124,22 +126,64 @@ You can configure Swiftdns to behave to your liking.
 To change a setting, simply open `/etc/swiftdns/config.toml` in a text editor (note that this requires root permissions).
 After saving your configuration file, run `systemctl restart swiftdns` to have the changes applied.
 
-The value for `mode` will dictate which of Cloudflare's resolvers to use. `Standard = 1.1.1.1`, `Safe = 1.1.1.2` (blocks malware), `Clean = 1.1.1.3` (blocks malware and adult websites).
-In contrast to Swiftdns, Cloudflare blocks domains by "resolving" them with `0.0.0.0`, while Swiftdns returns the `REFUSED` status.
+### General Configuration
 
-| Key     | Default        | Value(s)                           | Description                                                           |
-| ------- | -------------- | ---------------------------------- | --------------------------------------------------------------------- |
-| mode    | `Standard`     | One of `Standard`, `Safe`, `Clean` | Configure which mode to run Swiftdns in                               |
-| scope   | `Local`        | One of `Local`, `Global`           | If scope is `Local`, only queries sent from loopback will be accepted |
-| address | `127.0.0.1:53` | A socket address (with port)       | The address to bind the listener to                                   |
-| tor     | -              | [TorConfig](#tor-configuration)    | Configuration options for Tor                                         |
+| Key     | Default        | Value(s)                   | Description                                                           |
+| ------- | -------------- | -------------------------- | --------------------------------------------------------------------- |
+| scope   | `Local`        | One of `Local`, `Global`   | If scope is `Local`, only queries sent from loopback will be accepted |
+| address | `127.0.0.1:53` | A socket address with port | The address to bind the listener to                                   |
+
+### Resolver Configuration
+
+The `[resolver]` section defines which DNS-over-HTTPS provider Swiftdns will use:
+
+```toml
+[resolver]
+# The DoH URL with placeholders for name and type
+url = "https://1.1.1.1/dns-query?name={name}&type={type}"
+
+# Optional: IP addresses to directly connect to (bypassing system DNS)
+# Used when the URL contains a domain name that needs to be resolved
+bootstrap_ips = []  # Example: ["45.90.28.0", "45.90.30.0"] for NextDNS
+```
+
+#### Example Configurations
+
+**Cloudflare (Default)**
+
+```toml
+[resolver]
+url = "https://1.1.1.1/dns-query?name={name}&type={type}"
+```
+
+**Cloudflare Family (Blocks malware and adult content)**
+
+```toml
+[resolver]
+url = "https://1.1.1.3/dns-query?name={name}&type={type}"
+```
+
+**NextDNS with Custom Profile ID**
+
+```toml
+[resolver]
+url = "https://dns.nextdns.io/abc123?name={name}&type={type}"
+bootstrap_ips = ["45.90.28.0", "45.90.30.0"]
+```
+
+**Google DNS**
+
+```toml
+[resolver]
+url = "https://8.8.8.8/resolve?name={name}&type={type}"
+```
 
 ### Tor Configuration
 
-| Key         | Default          | Value(s)                     | Description                              |
-| ----------- | ---------------- | ---------------------------- | ---------------------------------------- |
-| tor.enabled | `false`          | bool                         | Whether to route DNS queries through tor |
-| tor.address | `127.0.0.1:9050` | A socket address (with port) | The address your Tor proxy is using      |
+| Key         | Default          | Value(s)                | Description                              |
+| ----------- | ---------------- | ----------------------- | ---------------------------------------- |
+| tor.enabled | `false`          | bool                    | Whether to route DNS queries through tor |
+| tor.address | `127.0.0.1:9050` | A socket address w/port | The address your Tor proxy is using      |
 
 ## Commands
 
@@ -165,6 +209,34 @@ $ swiftdns resolve <domain> [type: A] [--tor]
 **Flags**:
 
 `--tor`: Boolean flag to route the query through the Tor network.
+
+---
+
+### Check
+
+Test your DNS resolver configuration by performing lookups for a set of domains to verify it's working correctly.
+
+```bash
+$ swiftdns check [--tor]
+```
+
+This will display a table showing each test domain, the response time, number of answers received, TTL, and the first result.
+
+**Flags**:
+
+`--tor`: Boolean flag to also test Tor connectivity.
+
+---
+
+### Filters
+
+List all the active filters that Swiftdns is currently using.
+
+```bash
+$ swiftdns filters
+```
+
+This will display a numbered list of all filters, showing their names and file paths.
 
 ---
 

@@ -4,8 +4,8 @@ scope = "Local"
 address = "127.0.0.1:5053"
 
 [resolver]
-provider = "NextDNS"
-mode = "Standard"
+url = "https://dns.nextdns.io/dns-query?name={name}&type={type}"
+bootstrap_ips = ["45.90.28.0:443", "45.90.30.0:443"]
 
 [tor]
 enabled = false
