@@ -99,13 +99,14 @@ impl SwiftConfig {
                         return Err(ConfigError::InvalidResolverHost(self.resolver.url.clone()));
                     }
 
-                    Domain::from_str(host)
-                        .map_err(|_| ConfigError::InvalidResolverHost(self.resolver.url.clone()))?;
-                } else {
-                    return Err(ConfigError::InvalidResolverHost(self.resolver.url.clone()));
-                }
+                    // Check if host is a valid IP address or domain
+                    let is_valid =
+                        host.parse::<std::net::IpAddr>().is_ok() || Domain::from_str(host).is_ok();
 
-                if url.host_str().is_none() {
+                    if !is_valid {
+                        return Err(ConfigError::InvalidResolverHost(self.resolver.url.clone()));
+                    }
+                } else {
                     return Err(ConfigError::InvalidResolverHost(self.resolver.url.clone()));
                 }
             }
