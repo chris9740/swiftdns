@@ -78,7 +78,7 @@ Let's make use of comments to describe our rules:
 tiktok*.com*
 ```
 
-**Tip** - Test your rules with `swiftdns resolve example.com`. If done correctly, trying to resolve a blacklisted domain should give you an error.
+**Tip** - Test your rules with `swiftdns demo example.com`. This will show you whether this domain would be blocked or not. No queries will be sent to the DNS provider.
 
 ## Whitelisting
 

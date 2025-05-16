@@ -19,6 +19,8 @@ pub struct Cli {
 pub enum Commands {
     #[command(about = "Check DNS resolver health and performance")]
     Check(commands::check::CheckArgs),
+    #[command(about = "Test if a domain would be blocked by the blacklist")]
+    Demo(commands::demo::DemoArgs),
     #[command(about = "Start the DNS listener")]
     Start(commands::start::StartArgs),
     #[command(about = "Resolve a domain name")]
@@ -35,6 +37,7 @@ pub async fn start() -> Result<()> {
 
     match args.command {
         Commands::Check(args) => commands::check::execute(args, &mut config).await,
+        Commands::Demo(args) => commands::demo::execute(args).await,
         Commands::Start(args) => commands::start::execute(args, &mut config).await,
         Commands::Resolve(args) => commands::resolve::execute(args, &mut config).await,
         Commands::ListFilters => commands::filters::execute().await,
