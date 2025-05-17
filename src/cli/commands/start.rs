@@ -26,12 +26,13 @@ pub struct StartArgs {
     scope: Option<Scope>,
 }
 
-pub async fn execute(args: StartArgs, config: &mut SwiftConfig) -> Result<()> {
+pub async fn execute(args: StartArgs, config: &SwiftConfig) -> Result<()> {
+    let mut config = config.clone();
     let addr = args.address.unwrap_or(config.address);
 
     if let Some(scope) = args.scope {
         config.scope = Some(scope);
     }
 
-    listener::start(&addr, config).await
+    listener::start(&addr, &config).await
 }

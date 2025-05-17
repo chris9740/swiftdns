@@ -84,7 +84,7 @@ impl TestStatus {
     }
 }
 
-pub async fn execute(args: CheckArgs, config: &mut SwiftConfig) -> Result<()> {
+pub async fn execute(args: CheckArgs, config: &SwiftConfig) -> Result<()> {
     println!(); // Empty line at the beginning
 
     let test_domains = [
@@ -239,9 +239,10 @@ async fn test_resolver(client: &mut Client, domains: &[&str], config: &SwiftConf
     Ok(())
 }
 
-async fn test_tor(config: &mut SwiftConfig) -> Result<()> {
+async fn test_tor(config: &SwiftConfig) -> Result<()> {
+    let mut config = config.clone();
     config.tor.enabled = true;
-    let mut client = Client::create(config)?;
+    let mut client = Client::create(&config)?;
     let mut stdout = stdout();
 
     execute!(
@@ -269,7 +270,7 @@ async fn test_tor(config: &mut SwiftConfig) -> Result<()> {
 
     match resolver::resolve(
         &mut client,
-        config,
+        &config,
         &DnsJsonQuestion {
             name: test_domain.to_string(),
             qtype: QueryType::new(DnsRecordType::A).unwrap().value(),

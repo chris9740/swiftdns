@@ -33,13 +33,14 @@ pub struct ResolveArgs {
     pub tor: bool,
 }
 
-pub async fn execute(args: ResolveArgs, config: &mut SwiftConfig) -> Result<()> {
+pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
+    let mut config = config.clone();
     if args.tor {
         config.tor.enabled = true;
     }
 
     let name = args.domain.name();
-    let mut client = Client::create(config)?;
+    let mut client = Client::create(&config)?;
 
     if let Some(entry) = filter::blacklist::find(name) {
         println!("{}", entry.format_log_message(&args.domain));
@@ -53,7 +54,7 @@ pub async fn execute(args: ResolveArgs, config: &mut SwiftConfig) -> Result<()> 
         qtype: args.qtype.value(),
     };
 
-    Ok(dns::resolver::resolve(&mut client, config, &question)
+    Ok(dns::resolver::resolve(&mut client, &config, &question)
         .await
         .map_or_else(
             |err| {

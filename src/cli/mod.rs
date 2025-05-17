@@ -1,4 +1,3 @@
-pub mod args;
 pub mod commands;
 
 use anyhow::Result;
@@ -31,15 +30,15 @@ pub enum Commands {
 
 pub async fn start() -> Result<()> {
     let args = Cli::parse();
-    let mut config = crate::config::get_config()?;
+    let config = crate::config::get_config()?;
 
     crate::filter::migrate_filters()?;
 
     match args.command {
-        Commands::Check(args) => commands::check::execute(args, &mut config).await,
+        Commands::Check(args) => commands::check::execute(args, &config).await,
         Commands::Demo(args) => commands::demo::execute(args).await,
-        Commands::Start(args) => commands::start::execute(args, &mut config).await,
-        Commands::Resolve(args) => commands::resolve::execute(args, &mut config).await,
+        Commands::Start(args) => commands::start::execute(args, &config).await,
+        Commands::Resolve(args) => commands::resolve::execute(args, &config).await,
         Commands::ListFilters => commands::filters::execute().await,
     }
 }
