@@ -2,7 +2,7 @@ use std::{fmt::Display, str::FromStr};
 
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Clone)]
 pub struct Domain(String);
 
 #[derive(Debug, PartialEq)]
@@ -142,6 +142,16 @@ impl FromStr for Domain {
         }
 
         Ok(Domain(ascii_domain))
+    }
+}
+
+impl<'de> Deserialize<'de> for Domain {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Domain::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
