@@ -31,7 +31,10 @@ impl Client {
             .with_root_certificates(root_store)
             .with_no_client_auth();
 
-        let mut client_builder = reqwest::Client::builder().use_preconfigured_tls(tls_config);
+        let mut client_builder = reqwest::Client::builder()
+            .use_preconfigured_tls(tls_config)
+            .timeout(std::time::Duration::from_secs(10))
+            .connect_timeout(std::time::Duration::from_secs(5));
 
         if let Some(bootstrap_ips) = &config.resolver.bootstrap_ips {
             for ip in bootstrap_ips {

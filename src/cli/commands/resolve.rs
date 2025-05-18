@@ -72,7 +72,7 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
                     println!("Error: {err}");
                     String::new()
                 });
-                let records_len = response.answer.len();
+                let record_count = response.answer.len();
 
                 let url = url::Url::parse(&config.resolver.url)
                     .expect("Resolver URL should have been validated earlier");
@@ -81,8 +81,8 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
                 println!();
                 println!("{output}");
                 println!(
-                    "({records_len} {} found, query time: {elapsed}ms)",
-                    if records_len == 1 {
+                    "({record_count} {} found, query time: {elapsed}ms)",
+                    if record_count == 1 {
                         "record"
                     } else {
                         "records"
