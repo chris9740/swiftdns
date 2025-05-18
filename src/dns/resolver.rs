@@ -240,10 +240,6 @@ pub async fn resolve(
         .await
         .map_err(|e| DnsError::NetworkError(format!("Failed to send request: {}", e)))?
         .header(reqwest::header::ACCEPT, "application/dns-json")
-        .header(
-            reqwest::header::USER_AGENT,
-            format!("SwiftDNS/{}", env!("CARGO_PKG_VERSION")),
-        )
         .header(reqwest::header::HOST, url.host_str().unwrap_or(""));
 
     let res = request
