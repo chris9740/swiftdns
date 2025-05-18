@@ -13,6 +13,8 @@ pub struct CacheEntry {
 
 pub struct Cache {
     hash_map: HashMap<Question, CacheEntry>,
+    last_cleanup: DateTime<Local>,
+    cleanup_interval: Duration,
 }
 
 impl Default for Cache {
@@ -25,21 +27,21 @@ impl Cache {
     pub fn new() -> Cache {
         let hash_map = HashMap::new();
 
-        Cache { hash_map }
+        Cache {
+            hash_map,
+            last_cleanup: Local::now(),
+            cleanup_interval: Duration::seconds(60),
+        }
     }
 
     pub fn get(&mut self, question: &Question) -> Result<Option<CacheEntry>, DnsError> {
-        let entry = self
+        self.cleanup()?;
+
+        Ok(self
             .hash_map
             .get(question)
             .filter(|entry| entry.expires_at > Local::now())
-            .cloned();
-
-        if entry.is_none() {
-            self.hash_map.remove(question);
-        }
-
-        Ok(entry)
+            .cloned())
     }
 
     pub fn set(&mut self, question: Question, response: DnsJsonResponse) -> Result<(), DnsError> {
@@ -60,6 +62,15 @@ impl Cache {
 
         self.hash_map.insert(question, entry);
 
+        Ok(())
+    }
+
+    pub fn cleanup(&mut self) -> Result<(), DnsError> {
+        let now = Local::now();
+        if now - self.last_cleanup > self.cleanup_interval {
+            self.hash_map.retain(|_, entry| entry.expires_at > now);
+            self.last_cleanup = now;
+        }
         Ok(())
     }
 }
