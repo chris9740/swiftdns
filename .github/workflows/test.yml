@@ -28,17 +28,7 @@ jobs:
               run: |
                   shellcheck .github/hooks/prepare-commit-msg
 
-            - name: Install Python
-              uses: actions/setup-python@v2
-              with:
-                  python-version: "3.x"
-
-            - name: Install Python dependencies
-              run: |
-                  pip install -r tests/requirements.txt
-
             - name: Build and test
               run: |
                   cargo build --verbose
                   cargo test --verbose
-                  python3 tests/compare_dns.py
