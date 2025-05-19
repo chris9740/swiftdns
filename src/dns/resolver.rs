@@ -270,11 +270,11 @@ mod tests {
 
         if let Ok(response) = result {
             assert_eq!(response.status, 0);
-            assert_eq!(response.tc, false);
-            assert_eq!(response.rd, true);
-            assert_eq!(response.ra, true);
-            assert_eq!(response.ad, false);
-            assert_eq!(response.cd, false);
+            assert!(!response.tc);
+            assert!(response.rd);
+            assert!(response.ra);
+            assert!(!response.ad);
+            assert!(!response.cd);
 
             assert_eq!(response.answer.len(), 2);
             assert_eq!(response.answer[0].data, "93.184.216.34");
@@ -343,11 +343,11 @@ mod tests {
 
         if let Ok(response) = result {
             assert_eq!(response.status, 0);
-            assert_eq!(response.tc, false);
-            assert_eq!(response.rd, true);
-            assert_eq!(response.ra, true);
-            assert_eq!(response.ad, false);
-            assert_eq!(response.cd, false);
+            assert!(!response.tc);
+            assert!(response.rd);
+            assert!(response.ra);
+            assert!(!response.ad);
+            assert!(!response.cd);
 
             assert_eq!(response.answer.len(), 1);
             assert_eq!(response.answer[0].data, "www.example.com");

@@ -36,9 +36,22 @@ url = "2.5.4"
 
 [dev-dependencies]
 assert_cmd = "2.0.17"
+criterion = "0.6.0"
 mockito = "1.7.0"
 predicates = "3.1.3"
 tokio-test = "0.4.4"
+
+[[bench]]
+name = "dns_benchmarks"
+harness = false
+
+[[bench]]
+name = "domain_benchmarks"
+harness = false
+
+[[bench]]
+name = "dns_e2e_benchmarks"
+harness = false
 
 [package.metadata.deb]
 maintainer-scripts = "debian/"

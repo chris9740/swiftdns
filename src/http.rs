@@ -114,7 +114,7 @@ mod tests {
     fn test_client_creation() {
         let config = SwiftConfig {
             resolver: ResolverConfig {
-                url: "https://dns.swiftdns.mock/dns-query".to_string(),
+                url: "https://dns.swiftdns.mock/dns-query?name={name}&type={type}".to_string(),
                 bootstrap_ips: None,
             },
             tor: TorConfig {
