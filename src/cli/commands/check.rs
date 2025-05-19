@@ -95,7 +95,7 @@ pub async fn execute(args: CheckArgs, config: &SwiftConfig) -> Result<()> {
         "tutanota.com",
     ];
 
-    let mut client = Client::create(config)?;
+    let mut client = Client::connect(config).await?;
 
     let resolver_url = url::Url::parse(&config.resolver.url)
         .map_err(|_| anyhow::anyhow!("Invalid resolver URL"))?;
@@ -242,7 +242,8 @@ async fn test_resolver(client: &mut Client, domains: &[&str], config: &SwiftConf
 async fn test_tor(config: &SwiftConfig) -> Result<()> {
     let mut config = config.clone();
     config.tor.enabled = true;
-    let mut client = Client::create(&config)?;
+
+    let mut client = Client::connect(&config).await?;
     let mut stdout = stdout();
 
     execute!(

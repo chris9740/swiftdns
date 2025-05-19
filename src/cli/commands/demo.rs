@@ -22,3 +22,23 @@ pub async fn execute(args: DemoArgs) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr as _;
+
+    use super::*;
+    use crate::Domain;
+
+    #[test]
+    fn test_blacklist_detection() {
+        let args = DemoArgs {
+            domain: Domain::from_str("example.com").unwrap(),
+            tor: false,
+            qtype: crate::dns::resolver::DnsRecordType::A,
+        };
+
+        let result = tokio_test::block_on(execute(args));
+        assert!(result.is_ok());
+    }
+}

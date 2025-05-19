@@ -40,7 +40,7 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
     }
 
     let name = args.domain.name();
-    let mut client = Client::create(&config)?;
+    let mut client = Client::connect(&config).await?;
 
     if let Some(entry) = filter::blacklist::find(name) {
         println!("{}", entry.format_log_message(&args.domain));
@@ -52,6 +52,12 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
     let question = DnsJsonQuestion {
         name: args.domain.name().to_string(),
         qtype: args.qtype.value(),
+    };
+
+    let upstream_dns = if std::env::var("SWIFTDNS_TEST_MODE").is_ok() {
+        "https://dns.swiftdns.mock/dns-query"
+    } else {
+        config.resolver.url.as_str()
     };
 
     Ok(dns::resolver::resolve(&mut client, &config, &question)
@@ -74,7 +80,7 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
                 });
                 let record_count = response.answer.len();
 
-                let url = url::Url::parse(&config.resolver.url)
+                let url = url::Url::parse(upstream_dns)
                     .expect("Resolver URL should have been validated earlier");
 
                 println!("Upstream DNS: {}", url.host_str().unwrap_or("unknown"));

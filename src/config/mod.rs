@@ -35,7 +35,7 @@ impl TorConfig {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ResolverConfig {
     pub url: String,
     pub bootstrap_ips: Option<Vec<SocketAddr>>,

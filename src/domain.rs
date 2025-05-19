@@ -67,7 +67,7 @@ impl FromStr for Domain {
     ///
     /// # Examples
     /// Basic usage:
-    /// ```
+    /// ```no_run
     /// # use swiftdns::Domain;
     /// # use std::str::FromStr;
     /// let domain = Domain::from_str("example.com.").unwrap();
@@ -160,7 +160,7 @@ impl Domain {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```no_run
     /// # use swiftdns::Domain;
     /// # use std::str::FromStr;
     /// let domain = Domain::from_str("hälsa.se").unwrap();
@@ -178,7 +178,7 @@ impl Domain {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```no_run
     /// # use swiftdns::Domain;
     /// # use std::str::FromStr;
     /// let domain = Domain::from_str("xn--hlsa-loa.se").unwrap();

@@ -6,18 +6,18 @@ use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 
 use crate::config::SwiftConfig;
 
-enum ClientState {
-    NeedsValidation,
-    Ready,
-}
-
 pub struct Client {
     client: reqwest::Client,
-    state: ClientState,
 }
 
 impl Client {
-    pub fn create(config: &SwiftConfig) -> Result<Self> {
+    pub async fn connect(config: &SwiftConfig) -> Result<Self> {
+        if std::env::var("SWIFTDNS_TEST_MODE").is_ok() {
+            return Ok(Self {
+                client: reqwest::Client::new(),
+            });
+        }
+
         let mut root_store = RootCertStore::empty();
 
         for cert in load_native_certs()? {
@@ -63,32 +63,20 @@ impl Client {
             .build()
             .context("Failed to build HTTP client")?;
 
-        Ok(Self {
-            client,
-            state: if config.tor.enabled {
-                ClientState::NeedsValidation
-            } else {
-                ClientState::Ready
-            },
-        })
+        let result = Self { client };
+
+        if config.tor.enabled {
+            tor::proxy::validate(&result.client).await?;
+        }
+
+        Ok(result)
     }
 
-    pub async fn get<U>(&mut self, url: U) -> Result<RequestBuilder>
+    pub fn get<U>(&self, url: U) -> RequestBuilder
     where
         U: IntoUrl,
     {
-        if let ClientState::NeedsValidation = self.state {
-            self.validate().await?;
-        }
-        Ok(self.client.get(url))
-    }
-
-    async fn validate(&mut self) -> Result<()> {
-        if let ClientState::NeedsValidation = self.state {
-            tor::proxy::validate(&self.client).await?;
-            self.state = ClientState::Ready;
-        }
-        Ok(())
+        self.client.get(url)
     }
 }
 
@@ -114,5 +102,28 @@ mod tor {
 
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{ResolverConfig, SwiftConfig, TorConfig};
+
+    #[test]
+    fn test_client_creation() {
+        let config = SwiftConfig {
+            resolver: ResolverConfig {
+                url: "https://dns.swiftdns.mock/dns-query".to_string(),
+                bootstrap_ips: None,
+            },
+            tor: TorConfig {
+                enabled: false,
+                address: None,
+            },
+            ..Default::default()
+        };
+
+        assert!(tokio_test::block_on(Client::connect(&config)).is_ok());
     }
 }

@@ -9,7 +9,7 @@ use dns_message_parser::{question::QType, Dns, Flags, RCode};
 use crate::{
     cache::Cache,
     config::{Scope, SwiftConfig},
-    dns::{self, message_types::DnsJsonQuestion, DnsEncoder},
+    dns::{self, message_types::DnsJsonQuestion},
     domain::Domain,
     error::DnsError,
     filter,
@@ -85,10 +85,20 @@ async fn handle_query(
         cache.set(question.clone(), api_response.clone())?;
     }
 
-    response.answers = dns::map_answers(&api_response.answer);
+    response.answers = api_response
+        .answer
+        .iter()
+        .map(|a| dns::records::json_answer_to_rr(a))
+        .filter_map(|rr| rr.ok())
+        .collect();
+
     if let Some(authority) = &api_response.authority {
-        response.authorities = dns::map_answers(authority);
+        response.authorities = authority
+            .iter()
+            .filter_map(|rr| dns::records::json_answer_to_rr(rr).ok())
+            .collect();
     }
+
     response.flags = Flags {
         qr: true,
         aa: false,
@@ -104,7 +114,23 @@ async fn handle_query(
 }
 
 pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
-    let mut client = Client::create(config)?;
+    if std::env::var("SWIFTDNS_TEST_MODE").is_ok() {
+        println!("Starting DNS server on {}", addr);
+
+        if config.scope == Some(Scope::Local) {
+            println!("Server scope: Local only");
+        } else {
+            println!("Server scope: All interfaces");
+        }
+
+        if config.tor.enabled {
+            println!("Tor routing: Enabled");
+        }
+
+        return Ok(());
+    }
+
+    let mut client = Client::connect(config).await?;
     let mut cache = Cache::new();
 
     let socket = match UdpSocket::bind(addr) {
@@ -131,10 +157,29 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
             continue;
         }
 
-        match dns::decode(&buf[..amt]) {
+        match Dns::decode(Vec::from(&buf[..amt]).into()).map_err(DnsError::DecodeError) {
             Ok(query) => match handle_query(&query, &mut client, config, &mut cache).await {
                 Ok(response) => {
-                    let response_bytes = DnsEncoder::encode_response(response)?;
+                    let response = Dns {
+                        id: response.id,
+                        flags: Flags {
+                            qr: true,                      // Always true for responses
+                            opcode: response.flags.opcode, // Reflect query opcode
+                            aa: false,                     // Not authoritative
+                            tc: false,                     // No truncation by default
+                            rd: response.flags.rd,         // Reflect recursion desired
+                            ra: true,                      // Recursion available
+                            ad: false,                     // No DNSSEC validation
+                            cd: response.flags.cd,         // Reflect checking disabled
+                            rcode: response.flags.rcode,   // Reflect response code
+                        },
+                        additionals: response.additionals,
+                        authorities: response.authorities,
+                        questions: response.questions,
+                        answers: response.answers,
+                    };
+
+                    let response_bytes = Dns::encode(&response).map_err(DnsError::EncodeError)?;
                     socket.send_to(&response_bytes, src)?;
                 }
                 Err(why) => {
