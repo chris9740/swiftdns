@@ -1,9 +1,9 @@
 [package]
 name = "swiftdns"
-version = "0.13.0"
+version = "0.14.0"
 authors = ["chris9740"]
 edition = "2021"
-description = "Linux DNS client with privacy & blacklisting features"
+description = "Local DNS resolver with DoH, Tor routing, and privacy filtering"
 license-file = "LICENSE"
 
 [dependencies]
