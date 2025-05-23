@@ -159,6 +159,7 @@ async fn test_resolver(client: &mut Client, domains: &[&str], config: &SwiftConf
             &DnsJsonQuestion {
                 name: domain.to_string(),
                 qtype: QueryType::new(DnsRecordType::A).unwrap().value(),
+                dnssec: None,
             },
         )
         .await;
@@ -275,6 +276,7 @@ async fn test_tor(config: &SwiftConfig) -> Result<()> {
         &DnsJsonQuestion {
             name: test_domain.to_string(),
             qtype: QueryType::new(DnsRecordType::A).unwrap().value(),
+            dnssec: None,
         },
     )
     .await

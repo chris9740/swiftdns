@@ -37,9 +37,19 @@ async fn handle_query(
     response.set_authentic_data(false);
     response.set_checking_disabled(query.checking_disabled());
 
-    let client_supports_edns = query.extensions().is_some();
+    let dnssec_requested = if let Some(edns) = query.extensions() {
+        edns.flags().dnssec_ok
+    } else {
+        false
+    };
 
-    if client_supports_edns {
+    let requested_buffer_size = if let Some(edns) = query.extensions() {
+        edns.max_payload()
+    } else {
+        512
+    };
+
+    if query.extensions().is_some() {
         let opt_rdata = hickory_proto::rr::rdata::OPT::new(vec![]);
 
         let mut opt_record = hickory_proto::rr::Record::from_rdata(
@@ -48,8 +58,8 @@ async fn handle_query(
             hickory_proto::rr::RData::OPT(opt_rdata),
         );
 
-        opt_record.set_dns_class(hickory_proto::rr::DNSClass::OPT(1232));
-
+        let response_buffer_size = std::cmp::min(requested_buffer_size, 4096);
+        opt_record.set_dns_class(hickory_proto::rr::DNSClass::OPT(response_buffer_size));
         response.add_additional(opt_record);
     }
 
@@ -83,37 +93,48 @@ async fn handle_query(
         return Ok(response);
     }
 
-    let cached = cache.get(question)?;
+    let qtype = match question.query_type() {
+        RecordType::A => dns::resolver::DnsRecordType::A,
+        RecordType::AAAA => dns::resolver::DnsRecordType::AAAA,
+        RecordType::CNAME => dns::resolver::DnsRecordType::CNAME,
+        RecordType::MX => dns::resolver::DnsRecordType::MX,
+        RecordType::TXT => dns::resolver::DnsRecordType::TXT,
+        RecordType::SOA => dns::resolver::DnsRecordType::SOA,
+        RecordType::NS => dns::resolver::DnsRecordType::NS,
+        RecordType::SRV => dns::resolver::DnsRecordType::SRV,
+        RecordType::RRSIG => dns::resolver::DnsRecordType::RRSIG,
+        _ => {
+            response.set_response_code(ResponseCode::ServFail);
+            return Ok(response);
+        }
+    };
+
+    let question = DnsJsonQuestion {
+        name: question.name().to_string(),
+        qtype: qtype.value(),
+        dnssec: Some(dnssec_requested),
+    };
+
+    let cached = cache.get(&question)?;
 
     let api_response = if let Some(cached) = cached.clone() {
         cached.response
     } else {
-        let qtype = match question.query_type() {
-            RecordType::A => dns::resolver::DnsRecordType::A,
-            RecordType::AAAA => dns::resolver::DnsRecordType::AAAA,
-            RecordType::CNAME => dns::resolver::DnsRecordType::CNAME,
-            RecordType::MX => dns::resolver::DnsRecordType::MX,
-            RecordType::TXT => dns::resolver::DnsRecordType::TXT,
-            RecordType::SOA => dns::resolver::DnsRecordType::SOA,
-            RecordType::NS => dns::resolver::DnsRecordType::NS,
-            RecordType::SRV => dns::resolver::DnsRecordType::SRV,
-            _ => {
-                response.set_response_code(ResponseCode::ServFail);
-                return Ok(response);
-            }
-        };
+        let response = dns::resolver::resolve(client, config, &question)
+            .await
+            .map_err(|e| DnsError::ProviderError(e.to_string()))?;
 
-        dns::resolver::resolve(
-            client,
-            config,
-            &DnsJsonQuestion {
-                name: question.name().to_string(),
-                qtype: qtype.value(),
-            },
-        )
-        .await
-        .map_err(|e| DnsError::ProviderError(e.to_string()))?
+        if !response.answer.is_empty() || response.authority.is_some() {
+            cache.set(question.clone(), response.clone())?;
+        }
+
+        response
     };
+
+    let response_bytes = response.to_bytes().map_err(DnsError::ProtoError)?;
+    if response_bytes.len() > requested_buffer_size as usize {
+        response.set_truncated(true);
+    }
 
     let rcode = ResponseCode::from_low(api_response.status);
 
@@ -122,8 +143,15 @@ async fn handle_query(
     }
 
     for answer in &api_response.answer {
-        if let Ok(record) = dns::records::json_answer_to_rr(answer) {
-            response.add_answer(record);
+        match dns::records::json_answer_to_rr(answer) {
+            Ok(record) => {
+                response.add_answer(record);
+            }
+            Err(err) => {
+                eprintln!("Error converting JSON answer to RR: {}", err);
+                response.set_response_code(ResponseCode::ServFail);
+                return Ok(response);
+            }
         }
     }
 
@@ -139,6 +167,7 @@ async fn handle_query(
     response.set_truncated(api_response.tc);
     response.set_recursion_available(api_response.ra);
     response.set_authentic_data(api_response.ad);
+    response.set_checking_disabled(api_response.cd);
 
     Ok(response)
 }

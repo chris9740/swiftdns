@@ -51,6 +51,7 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
     let question = DnsJsonQuestion {
         name: args.domain.name().to_string(),
         qtype: args.qtype.value(),
+        dnssec: None,
     };
 
     let upstream_dns = if std::env::var("SWIFTDNS_TEST_MODE").is_ok() {

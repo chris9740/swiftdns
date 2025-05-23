@@ -48,6 +48,7 @@ fn e2e_dns_benchmark(c: &mut Criterion) {
                 &DnsJsonQuestion {
                     name: domain.name().to_string(),
                     qtype: QueryType::new(DnsRecordType::A).unwrap().value(),
+                    dnssec: None,
                 },
             )
             .await;
@@ -72,6 +73,7 @@ fn e2e_dns_benchmark(c: &mut Criterion) {
                             &DnsJsonQuestion {
                                 name: domain.name().to_string(),
                                 qtype: QueryType::new(DnsRecordType::A).unwrap().value(),
+                                dnssec: None,
                             },
                         )
                         .await

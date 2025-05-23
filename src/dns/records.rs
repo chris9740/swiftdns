@@ -4,7 +4,16 @@ use std::{
     str::FromStr as _,
 };
 
-use hickory_proto::rr::{resource::Record, Name, RData};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use hickory_proto::{
+    dnssec::{
+        rdata::{DNSSECRData, SIG},
+        Algorithm,
+    },
+    rr::{Name, RData, Record, RecordType as ProtoRecordType},
+};
+
+use crate::error::DnsError;
 
 use super::{message_types::DnsJsonAnswer, resolver::DnsRecordType};
 
@@ -86,10 +95,116 @@ pub fn json_answer_to_rr(answer: &DnsJsonAnswer) -> Result<Record, Box<dyn Error
                 priority, weight, port, target,
             ))
         }
+        Some(DnsRecordType::RRSIG) => {
+            let parts: Vec<&str> = data.split_whitespace().collect();
+            if parts.len() < 9 {
+                return Err(format!(
+                    "Invalid data format for RRSIG record, expected at least 9 parts, got {}: {}",
+                    parts.len(),
+                    data
+                )
+                .into());
+            }
+
+            let type_covered_str = parts[0].to_ascii_uppercase();
+            let type_covered = ProtoRecordType::from_str(&type_covered_str).map_err(|_| {
+                format!("Invalid RecordType string for RRSIG: {}", type_covered_str)
+            })?;
+
+            let algorithm_str = parts[1];
+            let algorithm = Algorithm::Unknown(algorithm_str.parse().unwrap_or(13));
+
+            let labels = parts[2]
+                .parse::<u8>()
+                .map_err(|e| format!("Invalid labels for RRSIG '{}': {}", parts[2], e))?;
+
+            let original_ttl = parts[3]
+                .parse::<u32>()
+                .map_err(|e| format!("Invalid original_ttl for RRSIG '{}': {}", parts[3], e))?;
+
+            let expiration = parts[4]
+                .parse::<u32>()
+                .map_err(|e| format!("Invalid expiration for RRSIG '{}': {}", parts[4], e))?;
+
+            let inception = parts[5]
+                .parse::<u32>()
+                .map_err(|e| format!("Invalid inception for RRSIG '{}': {}", parts[5], e))?;
+
+            let key_tag = parts[6]
+                .parse::<u16>()
+                .map_err(|e| format!("Invalid key_tag for RRSIG '{}': {}", parts[6], e))?;
+
+            let signer_name_str = parts[7];
+            let signer_name = Name::from_str(signer_name_str).map_err(|e| {
+                format!("Invalid signer_name for RRSIG '{}': {}", signer_name_str, e)
+            })?;
+
+            let signature_b64 = parts[8];
+            let signature_bytes = STANDARD.decode(signature_b64).map_err(|e| {
+                format!(
+                    "Invalid base64 signature for RRSIG '{}': {}",
+                    signature_b64, e
+                )
+            })?;
+
+            let rrsig_data = SIG::new(
+                type_covered,
+                algorithm,
+                labels,
+                original_ttl,
+                expiration,
+                inception,
+                key_tag,
+                signer_name,
+                signature_bytes,
+            );
+
+            RData::DNSSEC(DNSSECRData::SIG(rrsig_data))
+        }
         _ => return Err("Unknown record type from JSON response".into()),
     };
 
     Ok(Record::from_rdata(name, ttl, rdata))
+}
+
+pub fn rr_to_json_answer(record: &Record) -> Result<super::message_types::DnsJsonAnswer, DnsError> {
+    let data = match record.data() {
+        RData::A(ip) => ip.to_string(),
+        RData::AAAA(ip) => ip.to_string(),
+        RData::CNAME(name) => name.to_string(),
+        RData::MX(mx) => format!("{} {}", mx.preference(), mx.exchange()),
+        RData::TXT(txt) => txt.to_string(),
+        RData::NS(ns) => ns.to_string(),
+        RData::SOA(soa) => format!(
+            "{} {} {} {} {} {} {}",
+            soa.mname(),
+            soa.rname(),
+            soa.serial(),
+            soa.refresh(),
+            soa.retry(),
+            soa.expire(),
+            soa.minimum()
+        ),
+        RData::SRV(srv) => format!(
+            "{} {} {} {}",
+            srv.priority(),
+            srv.weight(),
+            srv.port(),
+            srv.target()
+        ),
+        _ => {
+            return Err(DnsError::NetworkError(
+                "Unsupported record type".to_string(),
+            ))
+        }
+    };
+
+    Ok(super::message_types::DnsJsonAnswer {
+        name: record.name().to_string(),
+        rtype: record.record_type().into(),
+        ttl: record.ttl(),
+        data,
+    })
 }
 
 #[cfg(test)]

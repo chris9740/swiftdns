@@ -61,11 +61,13 @@ impl DnsJsonResponse {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Eq, Hash, PartialEq)]
 pub struct DnsJsonQuestion {
     pub name: String,
     #[serde(rename = "type")]
     pub qtype: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dnssec: Option<bool>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
