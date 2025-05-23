@@ -7,6 +7,8 @@ address = "127.0.0.1:5053"
 url = "https://dns.nextdns.io/dns-query?name={name}&type={type}"
 bootstrap_ips = ["45.90.28.0:443", "45.90.30.0:443"]
 
+# url = "http://127.0.0.1:8080/resolve?name={name}&type={type}"
+
 [tor]
 enabled = false
 address = "127.0.0.1:9050"

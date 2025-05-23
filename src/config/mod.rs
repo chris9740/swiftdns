@@ -88,7 +88,7 @@ impl SwiftConfig {
     pub fn validate(&self) -> Result<(), ConfigError> {
         match url::Url::parse(&self.resolver.url) {
             Ok(url) => {
-                if url.scheme() != "https" {
+                if url.scheme() != "https" && url.host_str() != Some("127.0.0.1") {
                     return Err(ConfigError::InvalidResolverScheme(
                         self.resolver.url.clone(),
                     ));
