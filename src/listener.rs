@@ -105,7 +105,8 @@ async fn handle_query(
         RecordType::PTR => dns::resolver::DnsRecordType::PTR,
         RecordType::RRSIG => dns::resolver::DnsRecordType::RRSIG,
         _ => {
-            response.set_response_code(ResponseCode::ServFail);
+            eprintln!("Unsupported query type: {:?}", question.query_type());
+            response.set_response_code(ResponseCode::NotImp);
             return Ok(response);
         }
     };
