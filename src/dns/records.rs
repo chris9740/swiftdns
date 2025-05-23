@@ -95,6 +95,10 @@ pub fn json_answer_to_rr(answer: &DnsJsonAnswer) -> Result<Record, Box<dyn Error
                 priority, weight, port, target,
             ))
         }
+        Some(DnsRecordType::PTR) => {
+            let ptr_name = data.parse::<Name>()?;
+            RData::PTR(hickory_proto::rr::rdata::PTR(ptr_name))
+        }
         Some(DnsRecordType::RRSIG) => {
             let parts: Vec<&str> = data.split_whitespace().collect();
             if parts.len() < 9 {

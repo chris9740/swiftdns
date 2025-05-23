@@ -102,6 +102,7 @@ async fn handle_query(
         RecordType::SOA => dns::resolver::DnsRecordType::SOA,
         RecordType::NS => dns::resolver::DnsRecordType::NS,
         RecordType::SRV => dns::resolver::DnsRecordType::SRV,
+        RecordType::PTR => dns::resolver::DnsRecordType::PTR,
         RecordType::RRSIG => dns::resolver::DnsRecordType::RRSIG,
         _ => {
             response.set_response_code(ResponseCode::ServFail);

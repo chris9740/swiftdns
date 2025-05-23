@@ -22,6 +22,7 @@ pub enum DnsRecordType {
     SRV = 33,
     SOA = 6,
     TXT = 16,
+    PTR = 12,
     RRSIG = 46,
     ANY = 255,
 }
@@ -58,6 +59,7 @@ impl Display for DnsRecordType {
             Self::SRV => "SRV",
             Self::SOA => "SOA",
             Self::TXT => "TXT",
+            Self::PTR => "PTR",
             Self::RRSIG => "RRSIG",
             Self::ANY => "ANY",
         };
