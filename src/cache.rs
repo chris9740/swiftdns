@@ -1,18 +1,20 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Duration, Local};
-use hickory_proto::op::Query;
 
-use crate::{dns::message_types::DnsJsonResponse, error::DnsError};
+use crate::{
+    dns::message_types::{DnsJsonQuestion, DnsJsonResponse},
+    error::DnsError,
+};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CacheEntry {
     pub expires_at: DateTime<Local>,
     pub response: DnsJsonResponse,
 }
 
 pub struct Cache {
-    hash_map: HashMap<Query, CacheEntry>,
+    hash_map: HashMap<DnsJsonQuestion, CacheEntry>,
     last_cleanup: DateTime<Local>,
     cleanup_interval: Duration,
 }
@@ -34,7 +36,7 @@ impl Cache {
         }
     }
 
-    pub fn get(&mut self, question: &Query) -> Result<Option<CacheEntry>, DnsError> {
+    pub fn get(&mut self, question: &DnsJsonQuestion) -> Result<Option<CacheEntry>, DnsError> {
         self.cleanup()?;
 
         Ok(self
@@ -44,14 +46,27 @@ impl Cache {
             .cloned())
     }
 
-    pub fn set(&mut self, question: Query, response: DnsJsonResponse) -> Result<(), DnsError> {
+    pub fn set(
+        &mut self,
+        question: DnsJsonQuestion,
+        response: DnsJsonResponse,
+    ) -> Result<(), DnsError> {
         let ttl = response
             .answer
             .iter()
             .map(|a| a.ttl)
             .filter(|&t| t > 0)
             .min()
-            .ok_or_else(|| DnsError::CacheError("No valid TTL found".to_string()))?;
+            .or_else(|| {
+                response
+                    .authority
+                    .as_ref()?
+                    .iter()
+                    .map(|a| a.ttl)
+                    .filter(|&t| t > 0)
+                    .min()
+            })
+            .unwrap_or(300);
 
         let expires_at = Local::now() + Duration::seconds(ttl as i64);
 

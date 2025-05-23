@@ -1,4 +1,9 @@
 use anyhow::Result;
+use hickory_proto::{
+    op::{Message, MessageType, OpCode, Query},
+    rr::{Name, RecordType},
+    serialize::binary::{BinDecodable as _, BinEncodable},
+};
 use std::{fmt::Display, str::FromStr};
 use strum::{EnumIter, IntoEnumIterator};
 
@@ -17,6 +22,7 @@ pub enum DnsRecordType {
     SRV = 33,
     SOA = 6,
     TXT = 16,
+    RRSIG = 46,
     ANY = 255,
 }
 
@@ -52,6 +58,7 @@ impl Display for DnsRecordType {
             Self::SRV => "SRV",
             Self::SOA => "SOA",
             Self::TXT => "TXT",
+            Self::RRSIG => "RRSIG",
             Self::ANY => "ANY",
         };
         f.write_str(str)
@@ -98,13 +105,80 @@ pub async fn resolve(
         return Ok(mock_response_for_tests(question));
     }
 
+    if is_rfc8484_url(&config.resolver.url) {
+        resolve_rfc8484(client, config, question).await
+    } else {
+        resolve_json(client, config, question).await
+    }
+}
+
+fn is_rfc8484_url(url: &str) -> bool {
+    !url.contains("{name}") && !url.contains("{type}")
+}
+
+async fn resolve_rfc8484(
+    client: &mut http::Client,
+    config: &SwiftConfig,
+    question: &DnsJsonQuestion,
+) -> Result<DnsJsonResponse, DnsError> {
+    let dns_message = create_dns_query_message(question)?;
+    let wire_format = dns_message
+        .to_bytes()
+        .map_err(|e| DnsError::NetworkError(format!("Failed to encode DNS message: {}", e)))?;
+
     let url = url::Url::parse(&config.resolver.url)
         .map_err(|_| DnsError::InvalidResolverUrl(config.resolver.url.clone()))?;
 
-    let formatted_url = url
+    let request = client
+        .post(&config.resolver.url)
+        .header(reqwest::header::CONTENT_TYPE, "application/dns-message")
+        .header(reqwest::header::ACCEPT, "application/dns-message")
+        .header(reqwest::header::HOST, url.host_str().unwrap_or(""))
+        .body(wire_format);
+
+    let response = request
+        .send()
+        .await
+        .map_err(|e| DnsError::NetworkError(format!("Failed to send request: {}", e)))?;
+
+    if response.status() == reqwest::StatusCode::BAD_REQUEST {
+        return Err(DnsError::QueryError("Bad request".to_string()));
+    }
+
+    let response_bytes = response
+        .bytes()
+        .await
+        .map_err(|e| DnsError::NetworkError(format!("Failed to read response: {}", e)))?;
+
+    let dns_response = Message::from_bytes(&response_bytes)
+        .map_err(|e| DnsError::NetworkError(format!("Failed to parse DNS response: {}", e)))?;
+
+    convert_dns_message_to_json(dns_response)
+}
+
+async fn resolve_json(
+    client: &mut http::Client,
+    config: &SwiftConfig,
+    question: &DnsJsonQuestion,
+) -> Result<DnsJsonResponse, DnsError> {
+    let url = url::Url::parse(&config.resolver.url)
+        .map_err(|_| DnsError::InvalidResolverUrl(config.resolver.url.clone()))?;
+
+    let mut formatted_url = url
         .as_str()
         .replace("{name}", &question.name)
         .replace("{type}", &question.qtype.to_string());
+
+    // Add DNSSEC flag for JSON queries
+    if let Some(dnssec) = question.dnssec {
+        let separator = if formatted_url.contains('?') {
+            "&"
+        } else {
+            "?"
+        };
+        let do_value = if dnssec { "1" } else { "0" };
+        formatted_url = format!("{}{separator}do={do_value}", formatted_url);
+    }
 
     let request = client
         .get(&formatted_url)
@@ -125,6 +199,88 @@ pub async fn resolve(
         .map_err(|e| DnsError::NetworkError(format!("Failed to parse response: {}", e)))
 }
 
+fn create_dns_query_message(question: &DnsJsonQuestion) -> Result<Message, DnsError> {
+    let mut message = Message::new();
+    message.set_id(rand::random());
+    message.set_message_type(MessageType::Query);
+    message.set_op_code(OpCode::Query);
+    message.set_recursion_desired(true);
+
+    let name = Name::from_str(&question.name)
+        .map_err(|e| DnsError::NetworkError(format!("Invalid domain name: {}", e)))?;
+
+    let record_type = RecordType::from(question.qtype);
+    let query = Query::query(name, record_type);
+    message.add_query(query);
+
+    // Handle DNSSEC preferences for RFC 8484
+    if let Some(dnssec) = question.dnssec {
+        if dnssec {
+            // Create EDNS with DO bit set
+            let mut edns = hickory_proto::op::Edns::new();
+            edns.set_dnssec_ok(true);
+            edns.set_max_payload(4096);
+            message.set_edns(edns);
+        }
+        // If dnssec is false, we don't set EDNS or DO bit
+    }
+
+    Ok(message)
+}
+
+fn convert_dns_message_to_json(message: Message) -> Result<DnsJsonResponse, DnsError> {
+    use super::message_types::DnsJsonQuestion;
+
+    let mut json_response = DnsJsonResponse {
+        status: message.response_code().low(),
+        tc: message.truncated(),
+        rd: message.recursion_desired(),
+        ra: message.recursion_available(),
+        ad: message.authentic_data(),
+        cd: message.checking_disabled(),
+        question: None,
+        answer: vec![],
+        authority: None,
+    };
+
+    if !message.queries().is_empty() {
+        json_response.question = Some(
+            message
+                .queries()
+                .iter()
+                .map(|q| DnsJsonQuestion {
+                    name: q.name().to_string(),
+                    qtype: q.query_type().into(),
+                    dnssec: message
+                        .extensions()
+                        .as_ref()
+                        .map(|edns| edns.flags().dnssec_ok),
+                })
+                .collect(),
+        );
+    }
+
+    for record in message.answers() {
+        if let Ok(json_answer) = crate::dns::records::rr_to_json_answer(record) {
+            json_response.answer.push(json_answer);
+        }
+    }
+
+    if !message.name_servers().is_empty() {
+        let mut authority = vec![];
+        for record in message.name_servers() {
+            if let Ok(json_answer) = crate::dns::records::rr_to_json_answer(record) {
+                authority.push(json_answer);
+            }
+        }
+        if !authority.is_empty() {
+            json_response.authority = Some(authority);
+        }
+    }
+
+    Ok(json_response)
+}
+
 fn mock_response_for_tests(question: &DnsJsonQuestion) -> DnsJsonResponse {
     use crate::dns::message_types::{DnsJsonAnswer, DnsJsonResponse};
 
@@ -141,6 +297,7 @@ fn mock_response_for_tests(question: &DnsJsonQuestion) -> DnsJsonResponse {
         question: Some(vec![DnsJsonQuestion {
             name: domain.clone(),
             qtype,
+            dnssec: None,
         }]),
         answer: vec![],
         authority: None,
@@ -259,6 +416,7 @@ mod tests {
         let question = DnsJsonQuestion {
             name: "example.com".to_string(),
             qtype: DnsRecordType::A.value(),
+            dnssec: None,
         };
 
         let mut client = tokio_test::block_on(http::Client::connect(&config)).unwrap();
@@ -332,6 +490,7 @@ mod tests {
         let question = DnsJsonQuestion {
             name: "example.com".to_string(),
             qtype: DnsRecordType::CNAME.value(),
+            dnssec: None,
         };
 
         let mut client = tokio_test::block_on(http::Client::connect(&config)).unwrap();

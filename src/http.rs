@@ -78,6 +78,13 @@ impl Client {
     {
         self.client.get(url)
     }
+
+    pub fn post<U>(&self, url: U) -> RequestBuilder
+    where
+        U: IntoUrl,
+    {
+        self.client.post(url)
+    }
 }
 
 mod tor {

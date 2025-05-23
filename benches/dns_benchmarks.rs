@@ -45,6 +45,7 @@ fn dns_resolve_benchmark(c: &mut Criterion) {
                     &DnsJsonQuestion {
                         name: domain.name().to_string(),
                         qtype: QueryType::new(DnsRecordType::A).unwrap().value(),
+                        dnssec: None,
                     },
                 )
                 .await
