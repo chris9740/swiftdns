@@ -5,8 +5,6 @@ use colored::Colorize as _;
 use serde::Deserialize;
 use tabwriter::TabWriter;
 
-use crate::Domain;
-
 use super::resolver::DnsRecordType;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -40,7 +38,7 @@ impl DnsJsonResponse {
             let record_type =
                 DnsRecordType::from_u16(record.rtype).context("Unknown record type")?;
 
-            write!(tw, "{}\t", record.name.to_unicode())?;
+            write!(tw, "{}\t", record.name)?;
             write!(tw, "{} ({})\t", record_type, record_type.value())?;
             write!(tw, "{}\t", record.ttl)?;
             write!(tw, "{}", record.data)?;
@@ -72,7 +70,7 @@ pub struct DnsJsonQuestion {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct DnsJsonAnswer {
-    pub name: Domain,
+    pub name: String,
     #[serde(rename = "type")]
     pub rtype: u16,
     #[serde(rename = "TTL")]

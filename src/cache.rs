@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Duration, Local};
-use dns_message_parser::question::Question;
+use hickory_proto::op::Query;
 
 use crate::{dns::message_types::DnsJsonResponse, error::DnsError};
 
@@ -12,7 +12,7 @@ pub struct CacheEntry {
 }
 
 pub struct Cache {
-    hash_map: HashMap<Question, CacheEntry>,
+    hash_map: HashMap<Query, CacheEntry>,
     last_cleanup: DateTime<Local>,
     cleanup_interval: Duration,
 }
@@ -34,7 +34,7 @@ impl Cache {
         }
     }
 
-    pub fn get(&mut self, question: &Question) -> Result<Option<CacheEntry>, DnsError> {
+    pub fn get(&mut self, question: &Query) -> Result<Option<CacheEntry>, DnsError> {
         self.cleanup()?;
 
         Ok(self
@@ -44,7 +44,7 @@ impl Cache {
             .cloned())
     }
 
-    pub fn set(&mut self, question: Question, response: DnsJsonResponse) -> Result<(), DnsError> {
+    pub fn set(&mut self, question: Query, response: DnsJsonResponse) -> Result<(), DnsError> {
         let ttl = response
             .answer
             .iter()

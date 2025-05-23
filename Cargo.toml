@@ -17,7 +17,7 @@ serde = { version = "1.0.159", features = ["derive"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 clap = { version = "4.0", features = ["derive", "cargo"] }
 strum = { version = "0.24.1", features = ["derive"] }
-dns-message-parser = "0.7.0"
+hickory-proto = "0.25.2"
 bytes = "1.4.0"
 wildmatch = "2.1.1"
 chrono = "0.4.24"

@@ -1,5 +1,4 @@
 use anyhow::Result;
-use dns_message_parser::RCode;
 use std::{fmt::Display, str::FromStr};
 use strum::{EnumIter, IntoEnumIterator};
 
@@ -128,7 +127,6 @@ pub async fn resolve(
 
 fn mock_response_for_tests(question: &DnsJsonQuestion) -> DnsJsonResponse {
     use crate::dns::message_types::{DnsJsonAnswer, DnsJsonResponse};
-    use crate::Domain;
 
     let domain = question.name.clone();
     let qtype = question.qtype;
@@ -152,7 +150,7 @@ fn mock_response_for_tests(question: &DnsJsonQuestion) -> DnsJsonResponse {
         "example.com" => {
             if qtype == 1 {
                 response.answer = vec![DnsJsonAnswer {
-                    name: Domain::from_str("example.com").unwrap(),
+                    name: domain,
                     rtype: qtype,
                     ttl: 300,
                     data: "93.184.216.34".to_string(),
@@ -160,12 +158,12 @@ fn mock_response_for_tests(question: &DnsJsonQuestion) -> DnsJsonResponse {
             }
         }
         "nxdomain.example" => {
-            response.status = RCode::NXDomain as u8;
+            response.status = 3; // NXDOMAIN
         }
         _ => {
             if qtype == QueryType::new(DnsRecordType::A).unwrap().value() {
                 response.answer = vec![DnsJsonAnswer {
-                    name: Domain::from_str(&domain).unwrap(),
+                    name: domain,
                     rtype: qtype,
                     ttl: 300,
                     data: "192.0.2.1".to_string(),

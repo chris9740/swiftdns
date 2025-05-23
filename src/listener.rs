@@ -4,48 +4,82 @@ use std::{
 };
 
 use anyhow::Result;
-use dns_message_parser::{question::QType, Dns, Flags, RCode};
+use hickory_proto::{
+    op::{Message, MessageType, ResponseCode},
+    rr::{Name, RecordType},
+    serialize::binary::{BinDecodable, BinEncodable},
+};
 
 use crate::{
     cache::Cache,
     config::{Scope, SwiftConfig},
     dns::{self, message_types::DnsJsonQuestion},
-    domain::Domain,
+    domain::DnsName,
     error::DnsError,
     filter,
     http::Client,
 };
 
 async fn handle_query(
-    query: &Dns,
+    query: &Message,
     client: &mut Client,
     config: &SwiftConfig,
     cache: &mut Cache,
-) -> Result<Dns, DnsError> {
-    let mut response = query.clone();
+) -> Result<Message, DnsError> {
+    let mut response = Message::new();
+    response.set_id(query.id());
+    response.set_message_type(MessageType::Response);
+    response.set_op_code(query.op_code());
+    response.set_authoritative(false);
+    response.set_truncated(false);
+    response.set_recursion_desired(query.recursion_desired());
+    response.set_recursion_available(true);
+    response.set_authentic_data(false);
+    response.set_checking_disabled(query.checking_disabled());
+
+    let client_supports_edns = query.extensions().is_some();
+
+    if client_supports_edns {
+        let opt_rdata = hickory_proto::rr::rdata::OPT::new(vec![]);
+
+        let mut opt_record = hickory_proto::rr::Record::from_rdata(
+            Name::root(),
+            0,
+            hickory_proto::rr::RData::OPT(opt_rdata),
+        );
+
+        opt_record.set_dns_class(hickory_proto::rr::DNSClass::OPT(1232));
+
+        response.add_additional(opt_record);
+    }
+
+    for question in query.queries() {
+        response.add_query(question.clone());
+    }
 
     // RFC 1035 allows multiple questions per query for forward compatibility.
     // This feature is not implemented or used in practice
     // and poses security risks (DNS amplification).
     // This implementation supports only single-question queries.
-    if query.questions.len() != 1 {
-        response.flags.rcode = RCode::FormErr;
-
+    if query.queries().len() != 1 {
+        response.set_response_code(ResponseCode::FormErr);
         return Ok(response);
     }
 
-    let question = query.questions.first().unwrap();
+    let question = query.queries().first().unwrap();
 
-    let domain: Domain = ok_or_rcode!(
-        question.domain_name.to_string().parse(),
-        mut response,
-        RCode::NXDomain
-    );
+    let domain: DnsName = match question.name().to_string().parse() {
+        Ok(d) => d,
+        Err(err) => {
+            eprintln!("Error parsing domain name: {}", err);
+            response.set_response_code(ResponseCode::NXDomain);
+            return Ok(response);
+        }
+    };
 
-    if let Some(entry) = filter::blacklist::find(domain.name()) {
+    if let Some(entry) = filter::blacklist::find(&domain.name()) {
         println!("{}", entry.format_log_message(&domain));
-        response.flags.rcode = RCode::Refused;
-
+        response.set_response_code(ResponseCode::Refused);
         return Ok(response);
     }
 
@@ -54,61 +88,57 @@ async fn handle_query(
     let api_response = if let Some(cached) = cached.clone() {
         cached.response
     } else {
+        let qtype = match question.query_type() {
+            RecordType::A => dns::resolver::DnsRecordType::A,
+            RecordType::AAAA => dns::resolver::DnsRecordType::AAAA,
+            RecordType::CNAME => dns::resolver::DnsRecordType::CNAME,
+            RecordType::MX => dns::resolver::DnsRecordType::MX,
+            RecordType::TXT => dns::resolver::DnsRecordType::TXT,
+            RecordType::SOA => dns::resolver::DnsRecordType::SOA,
+            RecordType::NS => dns::resolver::DnsRecordType::NS,
+            RecordType::SRV => dns::resolver::DnsRecordType::SRV,
+            _ => {
+                response.set_response_code(ResponseCode::ServFail);
+                return Ok(response);
+            }
+        };
+
         dns::resolver::resolve(
             client,
             config,
             &DnsJsonQuestion {
-                name: question.domain_name.to_string(),
-                qtype: match question.q_type {
-                    QType::A => dns::resolver::DnsRecordType::A,
-                    QType::AAAA => dns::resolver::DnsRecordType::AAAA,
-                    QType::CNAME => dns::resolver::DnsRecordType::CNAME,
-                    QType::MX => dns::resolver::DnsRecordType::MX,
-                    QType::TXT => dns::resolver::DnsRecordType::TXT,
-                    QType::SOA => dns::resolver::DnsRecordType::SOA,
-                    _ => dns::resolver::DnsRecordType::ANY,
-                }
-                .value(),
+                name: question.name().to_string(),
+                qtype: qtype.value(),
             },
         )
         .await
         .map_err(|e| DnsError::ProviderError(e.to_string()))?
     };
 
-    let rcode = ok_or_rcode!(
-        RCode::try_from(api_response.status),
-        mut response,
-        RCode::ServFail
-    );
+    let rcode = ResponseCode::from_low(api_response.status);
 
     if cached.is_none() && !api_response.answer.is_empty() {
         cache.set(question.clone(), api_response.clone())?;
     }
 
-    response.answers = api_response
-        .answer
-        .iter()
-        .map(|a| dns::records::json_answer_to_rr(a))
-        .filter_map(|rr| rr.ok())
-        .collect();
-
-    if let Some(authority) = &api_response.authority {
-        response.authorities = authority
-            .iter()
-            .filter_map(|rr| dns::records::json_answer_to_rr(rr).ok())
-            .collect();
+    for answer in &api_response.answer {
+        if let Ok(record) = dns::records::json_answer_to_rr(answer) {
+            response.add_answer(record);
+        }
     }
 
-    response.flags = Flags {
-        qr: true,
-        aa: false,
-        tc: api_response.tc,
-        ra: api_response.ra,
-        ad: api_response.ad,
-        rcode,
+    if let Some(authority) = &api_response.authority {
+        for auth in authority {
+            if let Ok(record) = dns::records::json_answer_to_rr(auth) {
+                response.add_name_server(record);
+            }
+        }
+    }
 
-        ..query.flags
-    };
+    response.set_response_code(rcode);
+    response.set_truncated(api_response.tc);
+    response.set_recursion_available(api_response.ra);
+    response.set_authentic_data(api_response.ad);
 
     Ok(response)
 }
@@ -157,29 +187,10 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
             continue;
         }
 
-        match Dns::decode(Vec::from(&buf[..amt]).into()).map_err(DnsError::DecodeError) {
+        match Message::from_bytes(&buf[..amt]) {
             Ok(query) => match handle_query(&query, &mut client, config, &mut cache).await {
                 Ok(response) => {
-                    let response = Dns {
-                        id: response.id,
-                        flags: Flags {
-                            qr: true,                      // Always true for responses
-                            opcode: response.flags.opcode, // Reflect query opcode
-                            aa: false,                     // Not authoritative
-                            tc: false,                     // No truncation by default
-                            rd: response.flags.rd,         // Reflect recursion desired
-                            ra: true,                      // Recursion available
-                            ad: false,                     // No DNSSEC validation
-                            cd: response.flags.cd,         // Reflect checking disabled
-                            rcode: response.flags.rcode,   // Reflect response code
-                        },
-                        additionals: response.additionals,
-                        authorities: response.authorities,
-                        questions: response.questions,
-                        answers: response.answers,
-                    };
-
-                    let response_bytes = Dns::encode(&response).map_err(DnsError::EncodeError)?;
+                    let response_bytes = response.to_bytes().map_err(DnsError::ProtoError)?;
                     socket.send_to(&response_bytes, src)?;
                 }
                 Err(why) => {

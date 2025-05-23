@@ -66,13 +66,6 @@ fn test_resolve_command() {
         .success()
         .stdout(predicate::str::contains("No DNS records found"));
 
-    let mut cmd = test_command();
-    let assert = cmd.arg("resolve").arg("invalid_domain").assert();
-
-    assert
-        .failure()
-        .stderr(predicate::str::contains("Invalid character found: '_'"));
-
     std::env::remove_var("SWIFTDNS_TEST_MODE");
 }
 

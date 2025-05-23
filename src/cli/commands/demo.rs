@@ -8,7 +8,7 @@ pub use super::resolve::ResolveArgs as DemoArgs;
 pub async fn execute(args: DemoArgs) -> Result<()> {
     let name = args.domain.name();
 
-    if let Some(entry) = crate::filter::blacklist::find(name) {
+    if let Some(entry) = crate::filter::blacklist::find(&name) {
         println!(
             "{} would be blacklisted by {}:{} (pattern `{}`)",
             name.red(),
@@ -28,12 +28,12 @@ mod tests {
     use std::str::FromStr as _;
 
     use super::*;
-    use crate::Domain;
+    use crate::domain::DnsName;
 
     #[test]
     fn test_blacklist_detection() {
         let args = DemoArgs {
-            domain: Domain::from_str("example.com").unwrap(),
+            domain: DnsName::from_str("example.com").unwrap(),
             tor: false,
             qtype: crate::dns::resolver::DnsRecordType::A,
         };

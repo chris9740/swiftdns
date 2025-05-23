@@ -5,7 +5,7 @@ use std::time::Instant;
 use crate::{
     config::SwiftConfig,
     dns::{self, message_types::DnsJsonQuestion, resolver::DnsRecordType},
-    domain::Domain,
+    domain::DnsName,
     filter,
     http::Client,
 };
@@ -16,9 +16,9 @@ pub struct ResolveArgs {
         name = "name",
         help = "Domain to resolve",
         required = true,
-        value_parser = clap::value_parser!(Domain)
+        value_parser = clap::value_parser!(DnsName)
     )]
-    pub domain: Domain,
+    pub domain: DnsName,
 
     #[arg(
         name = "type",
@@ -39,10 +39,9 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
         config.tor.enabled = true;
     }
 
-    let name = args.domain.name();
     let mut client = Client::connect(&config).await?;
 
-    if let Some(entry) = filter::blacklist::find(name) {
+    if let Some(entry) = filter::blacklist::find(&args.domain.name()) {
         println!("{}", entry.format_log_message(&args.domain));
         return Ok(());
     }

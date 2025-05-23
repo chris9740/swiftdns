@@ -5,11 +5,8 @@ pub enum DnsError {
     #[error("Invalid resolver URL: {0}")]
     InvalidResolverUrl(String),
 
-    #[error("DNS decode error: {0}")]
-    DecodeError(#[from] dns_message_parser::DecodeError),
-
-    #[error("DNS encode error: {0}")]
-    EncodeError(#[from] dns_message_parser::EncodeError),
+    #[error("DNS proto error: {0}")]
+    ProtoError(#[from] hickory_proto::ProtoError),
 
     #[error("Provider error: {0}")]
     ProviderError(String),

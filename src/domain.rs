@@ -1,6 +1,77 @@
+use serde::Deserialize;
 use std::{fmt::Display, str::FromStr};
 
-use serde::Deserialize;
+#[derive(Debug, Clone)]
+pub enum DnsName {
+    Domain(Domain),    // Regular domains with validation
+    Authority(String), // Authority names (less strict)
+    Root,              // The root domain "."
+}
+
+impl FromStr for DnsName {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let trimmed = s.trim();
+
+        if trimmed == "." {
+            return Ok(DnsName::Root);
+        }
+
+        if let Ok(domain) = Domain::from_str(s) {
+            return Ok(DnsName::Domain(domain));
+        }
+
+        let authority = trimmed.strip_suffix('.').unwrap_or(trimmed);
+        Ok(DnsName::Authority(authority.to_string()))
+    }
+}
+
+impl Display for DnsName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DnsName::Domain(d) => write!(f, "{}", d.name()),
+            DnsName::Authority(a) => write!(f, "{}", a),
+            DnsName::Root => write!(f, "."),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for DnsName {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        DnsName::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl DnsName {
+    /// Converts the DNS name to its unicode format for display
+    pub fn to_unicode(&self) -> String {
+        match self {
+            DnsName::Domain(d) => d.to_unicode(),
+            DnsName::Authority(a) => {
+                if a.contains('.') {
+                    idna::domain_to_unicode(a).0
+                } else {
+                    a.clone()
+                }
+            }
+            DnsName::Root => ".".to_string(),
+        }
+    }
+
+    /// Returns the raw name (punycode for domains, as-is for others)
+    pub fn name(&self) -> String {
+        match self {
+            DnsName::Domain(d) => d.name().to_string(),
+            DnsName::Authority(a) => a.clone(),
+            DnsName::Root => ".".to_string(),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Domain(String);
@@ -76,6 +147,10 @@ impl FromStr for Domain {
     fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
         let domain = s.to_lowercase();
         let domain = domain.trim();
+
+        if s == "." {
+            return Ok(Domain(".".to_string()));
+        }
 
         // Fully qualified domain names (FQDN) end with an extra dot,
         // representing an empty label (e.g. "www.example.com.").
