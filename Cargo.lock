@@ -1919,7 +1919,6 @@ dependencies = [
  "rustls",
  "rustls-native-certs",
  "serde",
- "serde_json",
  "strum",
  "tabwriter",
  "thiserror 2.0.12",
