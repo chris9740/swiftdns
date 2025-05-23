@@ -8,10 +8,6 @@ Swiftdns enhances your browsing security by seamlessly integrating DNS over HTTP
 
 For those seeking an extra layer of privacy, Swiftdns also offers the option to route queries through a Tor proxy.
 
-## Notice
-
-Swiftdns is under active development, and as such, may exhibit occasional compatibility issues. Those issues are most prevalent in Chromium, where it might not always resolve domain names.
-
 ## Installing
 
 ### Prerequisites
