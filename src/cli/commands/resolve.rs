@@ -9,7 +9,7 @@ use std::io::Write;
 use std::{str::FromStr, time::Instant};
 use tabwriter::TabWriter;
 
-use crate::{config::SwiftConfig, filter, http::Client, upstream, Domain};
+use crate::{config::SwiftConfig, domain::DnsName, filter, http::Client, upstream};
 
 #[derive(Args)]
 pub struct ResolveArgs {
@@ -17,9 +17,9 @@ pub struct ResolveArgs {
         name = "name",
         help = "Domain to resolve",
         required = true,
-        value_parser = clap::value_parser!(Domain)
+        value_parser = clap::value_parser!(DnsName)
     )]
-    pub domain: Domain,
+    pub domain: DnsName,
 
     #[arg(
         name = "type",
@@ -43,7 +43,7 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
 
     let client = Client::connect(&config).await?;
 
-    if let Some(entry) = filter::blacklist::find(args.domain.name()) {
+    if let Some(entry) = filter::blacklist::find(&args.domain.name()) {
         println!("{}", entry.format_log_message(&args.domain));
         return Ok(());
     }
@@ -56,7 +56,7 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
     message.set_op_code(OpCode::Query);
     message.set_recursion_desired(true);
 
-    let query = Query::query(Name::from_str(args.domain.name())?, args.qtype);
+    let query = Query::query(Name::from_str(&args.domain.name())?, args.qtype);
 
     message.add_query(query);
 

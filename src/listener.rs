@@ -12,10 +12,11 @@ use hickory_proto::{
 use crate::{
     cache::Cache,
     config::{Scope, SwiftConfig},
+    domain::DnsName,
     error::DnsError,
     filter,
     http::Client,
-    upstream, Domain,
+    upstream,
 };
 
 fn create_response_base(message: &Message) -> Message {
@@ -49,13 +50,13 @@ async fn handle_message(
 
     let query = message.queries().first().unwrap();
 
-    let domain: Domain = ok_or_rcode!(
+    let domain: DnsName = ok_or_rcode!(
         query.name().to_string().parse(),
         mut response,
         ResponseCode::FormErr
     );
 
-    if filter::blacklist::find(domain.name()).is_some() {
+    if filter::blacklist::find(&domain.name()).is_some() {
         response.set_response_code(ResponseCode::Refused);
         return Ok(response);
     }
@@ -104,8 +105,8 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
             continue;
         }
 
-        match Message::from_bytes(&buf[..amt]) {
-            Ok(message) => match handle_message(&message, &client, config, &mut cache).await {
+        if let Ok(message) = Message::from_bytes(&buf[..amt]) {
+            match handle_message(&message, &client, config, &mut cache).await {
                 Ok(response) => {
                     socket.send_to(&response.to_bytes()?, src)?;
                 }
@@ -122,10 +123,9 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
 
                     socket.send_to(&error_response.to_bytes()?, src)?;
                 }
-            },
-            Err(err) => {
-                eprintln!("Dropped malformed message from {src}: {err}");
             }
+        } else {
+            eprintln!("Failed to parse DNS message from {src}");
         }
     }
 }

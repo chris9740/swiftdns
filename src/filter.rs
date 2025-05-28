@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Context, Result};
 use wildmatch::WildMatch;
 
-use crate::{config::get_config_path, Domain};
+use crate::{config::get_config_path, domain::DnsName};
 
 #[derive(serde::Serialize, Debug)]
 pub struct Filter {
@@ -37,7 +37,7 @@ pub struct Whitelist;
 pub struct Blacklist;
 
 impl FilterEntry<Blacklist> {
-    pub fn format_log_message(&self, domain: &Domain) -> String {
+    pub fn format_log_message(&self, domain: &DnsName) -> String {
         format!(
             "{} has been blacklisted (pattern `{}`, {}:{}), refusing.",
             domain.name(),
