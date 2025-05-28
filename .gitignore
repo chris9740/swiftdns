@@ -2,4 +2,3 @@ target/
 tests/env
 .venv/
 index.html
-dns_resolver_test.py

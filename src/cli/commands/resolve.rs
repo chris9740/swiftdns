@@ -69,7 +69,6 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
     let response = upstream::resolve(&client, &config, &message).await?;
     let elapsed = query_start_time.elapsed().as_millis();
 
-    // Check response code first
     match response.response_code() {
         hickory_proto::op::ResponseCode::NXDomain => {
             println!("{}: Domain does not exist", args.domain);
