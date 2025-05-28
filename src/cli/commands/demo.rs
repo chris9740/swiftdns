@@ -28,14 +28,14 @@ mod tests {
     use std::str::FromStr as _;
 
     use super::*;
-    use crate::domain::DnsName;
+    use crate::{dns::record_types::SupportedRecordType, domain::DnsName};
 
     #[test]
     fn test_blacklist_detection() {
         let args = DemoArgs {
             domain: DnsName::from_str("example.com").unwrap(),
             tor: false,
-            qtype: crate::dns::resolver::DnsRecordType::A,
+            qtype: SupportedRecordType::A,
         };
 
         let result = tokio_test::block_on(execute(args));

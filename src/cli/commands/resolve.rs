@@ -4,8 +4,9 @@ use std::time::Instant;
 
 use crate::{
     config::SwiftConfig,
-    dns::{self, message_types::DnsJsonQuestion, resolver::DnsRecordType},
+    dns::{self, message_types::DnsJsonQuestion, record_types::SupportedRecordType},
     domain::DnsName,
+    error::DnsError,
     filter,
     http::Client,
 };
@@ -24,10 +25,10 @@ pub struct ResolveArgs {
         name = "type",
         help = "The type of record to query for",
         required = false,
-        value_parser = clap::value_parser!(DnsRecordType),
-        default_value_t = DnsRecordType::A
+        value_parser = clap::value_parser!(SupportedRecordType),
+        default_value_t = SupportedRecordType::A
     )]
-    pub qtype: DnsRecordType,
+    pub qtype: SupportedRecordType,
 
     #[arg(long = "tor", help = "Route through Tor", action = clap::ArgAction::SetTrue)]
     pub tor: bool,
@@ -74,10 +75,12 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
                 }
 
                 let elapsed = query_start_time.elapsed().as_millis();
-                let output = response.format_output().unwrap_or_else(|err| {
-                    println!("Error: {err}");
-                    String::new()
-                });
+                let output = match response.format_output() {
+                    Ok(output) => output,
+                    Err(err) => {
+                        return Err(DnsError::OutputError(err));
+                    }
+                };
                 let record_count = response.answer.len();
 
                 let url = url::Url::parse(upstream_dns)

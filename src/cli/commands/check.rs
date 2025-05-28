@@ -10,10 +10,7 @@ use std::{str::FromStr as _, time::Instant};
 
 use crate::{
     config::SwiftConfig,
-    dns::{
-        message_types::DnsJsonQuestion,
-        resolver::{self, DnsRecordType, QueryType},
-    },
+    dns::{message_types::DnsJsonQuestion, record_types::SupportedRecordType, resolver},
     domain::Domain,
     http::Client,
 };
@@ -96,9 +93,7 @@ pub async fn execute(args: CheckArgs, config: &SwiftConfig) -> Result<()> {
     ];
 
     let mut client = Client::connect(config).await?;
-
-    let resolver_url = url::Url::parse(&config.resolver.url)
-        .map_err(|_| anyhow::anyhow!("Invalid resolver URL"))?;
+    let resolver_url = url::Url::parse(&config.resolver.url)?;
 
     let mut header_url = resolver_url.clone();
     header_url.set_query(None);
@@ -158,7 +153,7 @@ async fn test_resolver(client: &mut Client, domains: &[&str], config: &SwiftConf
             config,
             &DnsJsonQuestion {
                 name: domain.to_string(),
-                qtype: QueryType::new(DnsRecordType::A).unwrap().value(),
+                qtype: SupportedRecordType::A.value(),
                 dnssec: None,
             },
         )
@@ -275,7 +270,7 @@ async fn test_tor(config: &SwiftConfig) -> Result<()> {
         &config,
         &DnsJsonQuestion {
             name: test_domain.to_string(),
-            qtype: QueryType::new(DnsRecordType::A).unwrap().value(),
+            qtype: SupportedRecordType::A.value(),
             dnssec: None,
         },
     )

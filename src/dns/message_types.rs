@@ -1,11 +1,12 @@
-use std::io::Write as _;
+use std::{io::Write as _, str::FromStr};
 
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use colored::Colorize as _;
+use hickory_proto::rr::{Name, Record};
 use serde::Deserialize;
 use tabwriter::TabWriter;
 
-use super::resolver::DnsRecordType;
+use super::record_types::SupportedRecordType;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "PascalCase")]
@@ -35,13 +36,25 @@ impl DnsJsonResponse {
         writeln!(tw, "{}", headers.join("\t"))?;
 
         for record in &self.answer {
-            let record_type =
-                DnsRecordType::from_u16(record.rtype).context("Unknown record type")?;
+            let record_type = SupportedRecordType::try_from(record.rtype)
+                .map_err(|e| anyhow::anyhow!("Unsupported record type {}: {}", record.rtype, e))?;
 
-            write!(tw, "{}\t", record.name)?;
+            let name = Name::from_str(&record.name)?;
+            let record = match record.to_record() {
+                Ok(r) => r,
+                Err(e) => {
+                    return Err(anyhow::anyhow!(
+                        "Failed to parse record data for {}: {}",
+                        record.name,
+                        e
+                    ));
+                }
+            };
+
+            write!(tw, "{}\t", name.to_ascii())?;
             write!(tw, "{} ({})\t", record_type, record_type.value())?;
-            write!(tw, "{}\t", record.ttl)?;
-            write!(tw, "{}", record.data)?;
+            write!(tw, "{}\t", record.ttl())?;
+            write!(tw, "{}", record.data().to_string())?;
             writeln!(tw)?;
         }
 
@@ -78,4 +91,13 @@ pub struct DnsJsonAnswer {
     #[serde(rename = "TTL")]
     pub ttl: u32,
     pub data: String,
+}
+
+impl DnsJsonAnswer {
+    pub fn to_record(&self) -> Result<Record> {
+        let record_type = SupportedRecordType::try_from(self.rtype)
+            .map_err(|e| anyhow::anyhow!("Unsupported record type {}: {}", self.rtype, e))?;
+        let name = Name::from_str(&self.name)?;
+        record_type.parse_data(&self.data, name, self.ttl)
+    }
 }

@@ -1,102 +1,19 @@
 use anyhow::Result;
 use hickory_proto::{
     op::{Message, MessageType, OpCode, Query},
-    rr::{Name, RecordType},
+    rr::{Name, Record, RecordType},
     serialize::binary::{BinDecodable as _, BinEncodable},
 };
-use std::{fmt::Display, str::FromStr};
-use strum::{EnumIter, IntoEnumIterator};
+use std::str::FromStr;
 
-use crate::{config::SwiftConfig, error::DnsError, http};
+use crate::{
+    config::SwiftConfig,
+    dns::{message_types::DnsJsonAnswer, record_types::SupportedRecordType},
+    error::DnsError,
+    http,
+};
 
 use super::message_types::{DnsJsonQuestion, DnsJsonResponse};
-
-#[derive(Debug, EnumIter, Clone, Copy, Eq, Hash, PartialEq)]
-#[allow(clippy::upper_case_acronyms)]
-pub enum DnsRecordType {
-    A = 1,
-    AAAA = 28,
-    CNAME = 5,
-    MX = 15,
-    NS = 2,
-    SRV = 33,
-    SOA = 6,
-    TXT = 16,
-    PTR = 12,
-    RRSIG = 46,
-    ANY = 255,
-}
-
-impl DnsRecordType {
-    pub fn value(&self) -> u16 {
-        *self as u16
-    }
-
-    pub fn from_u16(value: u16) -> Option<Self> {
-        Self::iter().find(|r| r.value() == value)
-    }
-}
-
-impl FromStr for DnsRecordType {
-    type Err = &'static str;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let input = s.to_lowercase();
-        Self::iter()
-            .find(|rt| rt.to_string().to_lowercase() == input)
-            .ok_or("Invalid record type")
-    }
-}
-
-impl Display for DnsRecordType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let str = match self {
-            Self::A => "A",
-            Self::AAAA => "AAAA",
-            Self::CNAME => "CNAME",
-            Self::MX => "MX",
-            Self::NS => "NS",
-            Self::SRV => "SRV",
-            Self::SOA => "SOA",
-            Self::TXT => "TXT",
-            Self::PTR => "PTR",
-            Self::RRSIG => "RRSIG",
-            Self::ANY => "ANY",
-        };
-        f.write_str(str)
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct QueryType(DnsRecordType);
-
-impl QueryType {
-    pub fn new(record_type: DnsRecordType) -> Option<Self> {
-        match record_type {
-            DnsRecordType::A
-            | DnsRecordType::AAAA
-            | DnsRecordType::CNAME
-            | DnsRecordType::MX
-            | DnsRecordType::TXT
-            | DnsRecordType::SOA => Some(Self(record_type)),
-            _ => None,
-        }
-    }
-
-    pub fn value(&self) -> u16 {
-        self.0.value()
-    }
-
-    pub fn into_inner(self) -> DnsRecordType {
-        self.0
-    }
-}
-
-impl From<QueryType> for DnsRecordType {
-    fn from(qt: QueryType) -> Self {
-        qt.0
-    }
-}
 
 pub async fn resolve(
     client: &mut http::Client,
@@ -124,9 +41,7 @@ async fn resolve_rfc8484(
     question: &DnsJsonQuestion,
 ) -> Result<DnsJsonResponse, DnsError> {
     let dns_message = create_dns_query_message(question)?;
-    let wire_format = dns_message
-        .to_bytes()
-        .map_err(|e| DnsError::NetworkError(format!("Failed to encode DNS message: {}", e)))?;
+    let wire_format = dns_message.to_bytes()?;
 
     let url = url::Url::parse(&config.resolver.url)
         .map_err(|_| DnsError::InvalidResolverUrl(config.resolver.url.clone()))?;
@@ -152,8 +67,7 @@ async fn resolve_rfc8484(
         .await
         .map_err(|e| DnsError::NetworkError(format!("Failed to read response: {}", e)))?;
 
-    let dns_response = Message::from_bytes(&response_bytes)
-        .map_err(|e| DnsError::NetworkError(format!("Failed to parse DNS response: {}", e)))?;
+    let dns_response = Message::from_bytes(&response_bytes)?;
 
     convert_dns_message_to_json(dns_response)
 }
@@ -171,7 +85,6 @@ async fn resolve_json(
         .replace("{name}", &question.name)
         .replace("{type}", &question.qtype.to_string());
 
-    // Add DNSSEC flag for JSON queries
     if let Some(dnssec) = question.dnssec {
         let separator = if formatted_url.contains('?') {
             "&"
@@ -215,16 +128,13 @@ fn create_dns_query_message(question: &DnsJsonQuestion) -> Result<Message, DnsEr
     let query = Query::query(name, record_type);
     message.add_query(query);
 
-    // Handle DNSSEC preferences for RFC 8484
     if let Some(dnssec) = question.dnssec {
         if dnssec {
-            // Create EDNS with DO bit set
             let mut edns = hickory_proto::op::Edns::new();
             edns.set_dnssec_ok(true);
             edns.set_max_payload(4096);
             message.set_edns(edns);
         }
-        // If dnssec is false, we don't set EDNS or DO bit
     }
 
     Ok(message)
@@ -262,25 +172,44 @@ fn convert_dns_message_to_json(message: Message) -> Result<DnsJsonResponse, DnsE
         );
     }
 
-    for record in message.answers() {
-        if let Ok(json_answer) = crate::dns::records::rr_to_json_answer(record) {
-            json_response.answer.push(json_answer);
-        }
-    }
+    json_response.answer = convert_records_to_json_answers(message.answers())?;
 
     if !message.name_servers().is_empty() {
-        let mut authority = vec![];
-        for record in message.name_servers() {
-            if let Ok(json_answer) = crate::dns::records::rr_to_json_answer(record) {
-                authority.push(json_answer);
-            }
-        }
-        if !authority.is_empty() {
-            json_response.authority = Some(authority);
-        }
+        json_response.authority = Some(convert_records_to_json_answers(message.name_servers())?);
     }
 
     Ok(json_response)
+}
+
+fn convert_records_to_json_answers(records: &[Record]) -> Result<Vec<DnsJsonAnswer>, DnsError> {
+    let mut answers = Vec::with_capacity(records.len());
+
+    for record in records {
+        let supported_type = SupportedRecordType::try_from(record.record_type()).map_err(|e| {
+            DnsError::UnsupportedRecordType(format!("Record type {}: {}", record.record_type(), e))
+        })?;
+
+        if !supported_type.supports_record_data(record) {
+            return Err(DnsError::UnsupportedRecordData(format!(
+                "Record type {} does not support data formatting for record: {}",
+                record.record_type(),
+                record
+            )));
+        }
+
+        let data = supported_type.format_data(record).map_err(|e| {
+            DnsError::RecordDataFormatError(format!("Failed to format record data: {}", e))
+        })?;
+
+        answers.push(DnsJsonAnswer {
+            name: record.name().to_string(),
+            rtype: record.record_type().into(),
+            ttl: record.ttl(),
+            data,
+        });
+    }
+
+    Ok(answers)
 }
 
 fn mock_response_for_tests(question: &DnsJsonQuestion) -> DnsJsonResponse {
@@ -307,7 +236,7 @@ fn mock_response_for_tests(question: &DnsJsonQuestion) -> DnsJsonResponse {
 
     match domain.as_str() {
         "example.com" => {
-            if qtype == 1 {
+            if qtype == SupportedRecordType::A.value() {
                 response.answer = vec![DnsJsonAnswer {
                     name: domain,
                     rtype: qtype,
@@ -320,7 +249,7 @@ fn mock_response_for_tests(question: &DnsJsonQuestion) -> DnsJsonResponse {
             response.status = 3; // NXDOMAIN
         }
         _ => {
-            if qtype == QueryType::new(DnsRecordType::A).unwrap().value() {
+            if qtype == SupportedRecordType::A.value() {
                 response.answer = vec![DnsJsonAnswer {
                     name: domain,
                     rtype: qtype,
@@ -338,29 +267,6 @@ fn mock_response_for_tests(question: &DnsJsonQuestion) -> DnsJsonResponse {
 mod tests {
     use super::*;
     use crate::config::SwiftConfig;
-
-    #[test]
-    fn test_dns_record_type() {
-        assert_eq!(DnsRecordType::A.value(), 1);
-        assert_eq!(DnsRecordType::AAAA.value(), 28);
-        assert_eq!(DnsRecordType::CNAME.value(), 5);
-        assert_eq!(DnsRecordType::MX.value(), 15);
-        assert_eq!(DnsRecordType::NS.value(), 2);
-        assert_eq!(DnsRecordType::SRV.value(), 33);
-        assert_eq!(DnsRecordType::SOA.value(), 6);
-        assert_eq!(DnsRecordType::TXT.value(), 16);
-        assert_eq!(DnsRecordType::ANY.value(), 255);
-    }
-
-    #[test]
-    fn test_query_type() {
-        let a_query = QueryType::new(DnsRecordType::A);
-        assert!(a_query.is_some());
-        assert_eq!(a_query.unwrap().value(), 1);
-
-        let any_query = QueryType::new(DnsRecordType::ANY);
-        assert!(any_query.is_none());
-    }
 
     #[test]
     fn test_resolve_with_mock() {
@@ -406,10 +312,7 @@ mod tests {
 
         let config = SwiftConfig {
             resolver: crate::config::ResolverConfig {
-                url: format!(
-                    "http://{host}/resolve?name={{name}}&type={{type}}",
-                    host = host
-                ),
+                url: format!("http://{host}/resolve?name={{name}}&type={{type}}",),
                 ..Default::default()
             },
             ..Default::default()
@@ -417,7 +320,7 @@ mod tests {
 
         let question = DnsJsonQuestion {
             name: "example.com".to_string(),
-            qtype: DnsRecordType::A.value(),
+            qtype: SupportedRecordType::A.value(),
             dnssec: None,
         };
 
@@ -480,10 +383,7 @@ mod tests {
 
         let config = SwiftConfig {
             resolver: crate::config::ResolverConfig {
-                url: format!(
-                    "http://{host}/resolve?name={{name}}&type={{type}}",
-                    host = host
-                ),
+                url: format!("http://{host}/resolve?name={{name}}&type={{type}}",),
                 ..Default::default()
             },
             ..Default::default()
@@ -491,7 +391,7 @@ mod tests {
 
         let question = DnsJsonQuestion {
             name: "example.com".to_string(),
-            qtype: DnsRecordType::CNAME.value(),
+            qtype: SupportedRecordType::CNAME.value(),
             dnssec: None,
         };
 

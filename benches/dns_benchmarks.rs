@@ -2,10 +2,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use std::{hint::black_box, str::FromStr};
 use swiftdns::{
     config::{ResolverConfig, SwiftConfig, TorConfig},
-    dns::{
-        message_types::DnsJsonQuestion,
-        resolver::{DnsRecordType, QueryType},
-    },
+    dns::{message_types::DnsJsonQuestion, record_types::SupportedRecordType},
     domain::Domain,
     http::Client,
 };
@@ -44,7 +41,7 @@ fn dns_resolve_benchmark(c: &mut Criterion) {
                     &config,
                     &DnsJsonQuestion {
                         name: domain.name().to_string(),
-                        qtype: QueryType::new(DnsRecordType::A).unwrap().value(),
+                        qtype: SupportedRecordType::A.value(),
                         dnssec: None,
                     },
                 )

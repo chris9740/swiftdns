@@ -1,4 +1,5 @@
 use std::{
+    convert::TryFrom,
     io::ErrorKind,
     net::{SocketAddr, UdpSocket},
 };
@@ -6,14 +7,14 @@ use std::{
 use anyhow::Result;
 use hickory_proto::{
     op::{Message, MessageType, ResponseCode},
-    rr::{Name, RecordType},
+    rr::Name,
     serialize::binary::{BinDecodable, BinEncodable},
 };
 
 use crate::{
     cache::Cache,
     config::{Scope, SwiftConfig},
-    dns::{self, message_types::DnsJsonQuestion},
+    dns::{self, message_types::DnsJsonQuestion, record_types::SupportedRecordType},
     domain::DnsName,
     error::DnsError,
     filter,
@@ -93,18 +94,9 @@ async fn handle_query(
         return Ok(response);
     }
 
-    let qtype = match question.query_type() {
-        RecordType::A => dns::resolver::DnsRecordType::A,
-        RecordType::AAAA => dns::resolver::DnsRecordType::AAAA,
-        RecordType::CNAME => dns::resolver::DnsRecordType::CNAME,
-        RecordType::MX => dns::resolver::DnsRecordType::MX,
-        RecordType::TXT => dns::resolver::DnsRecordType::TXT,
-        RecordType::SOA => dns::resolver::DnsRecordType::SOA,
-        RecordType::NS => dns::resolver::DnsRecordType::NS,
-        RecordType::SRV => dns::resolver::DnsRecordType::SRV,
-        RecordType::PTR => dns::resolver::DnsRecordType::PTR,
-        RecordType::RRSIG => dns::resolver::DnsRecordType::RRSIG,
-        _ => {
+    let qtype = match SupportedRecordType::try_from(question.query_type()) {
+        Ok(t) => t,
+        Err(_) => {
             eprintln!("Unsupported query type: {:?}", question.query_type());
             response.set_response_code(ResponseCode::NotImp);
             return Ok(response);
@@ -122,9 +114,7 @@ async fn handle_query(
     let api_response = if let Some(cached) = cached.clone() {
         cached.response
     } else {
-        let response = dns::resolver::resolve(client, config, &question)
-            .await
-            .map_err(|e| DnsError::ProviderError(e.to_string()))?;
+        let response = dns::resolver::resolve(client, config, &question).await?;
 
         if !response.answer.is_empty() || response.authority.is_some() {
             cache.set(question.clone(), response.clone())?;
@@ -144,23 +134,24 @@ async fn handle_query(
         cache.set(question.clone(), api_response.clone())?;
     }
 
-    for answer in &api_response.answer {
-        match dns::records::json_answer_to_rr(answer) {
-            Ok(record) => {
-                response.add_answer(record);
-            }
-            Err(err) => {
-                eprintln!("Error converting JSON answer to RR: {}", err);
-                response.set_response_code(ResponseCode::ServFail);
-                return Ok(response);
-            }
+    for record in &api_response.answer {
+        if let Ok(rr) = record.to_record() {
+            response.add_answer(rr);
+        } else {
+            eprintln!("Error parsing answer record: {:?}", record);
+            response.set_response_code(ResponseCode::ServFail);
+            return Ok(response);
         }
     }
 
     if let Some(authority) = &api_response.authority {
-        for auth in authority {
-            if let Ok(record) = dns::records::json_answer_to_rr(auth) {
-                response.add_name_server(record);
+        for record in authority {
+            if let Ok(rr) = record.to_record() {
+                response.add_name_server(rr);
+            } else {
+                eprintln!("Error parsing authority record: {:?}", record);
+                response.set_response_code(ResponseCode::ServFail);
+                return Ok(response);
             }
         }
     }
@@ -213,6 +204,8 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
         let mut buf = [0; 512];
         let (amt, src) = socket.recv_from(&mut buf)?;
 
+        println!("Received query from {src}");
+
         if config.scope == Some(Scope::Local) && !src.ip().is_loopback() {
             eprintln!("Received non-local request from {src}");
             continue;
@@ -225,8 +218,13 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
                     socket.send_to(&response_bytes, src)?;
                 }
                 Err(why) => {
-                    eprintln!("There was an error while resolving: {}", why);
-                    continue;
+                    eprintln!("Error resolving query: {}", why);
+                    let mut error_response = Message::new();
+                    error_response.set_id(query.id());
+                    error_response.set_message_type(MessageType::Response);
+                    error_response.set_response_code(why.response_code());
+                    let error_bytes = error_response.to_bytes().map_err(DnsError::ProtoError)?;
+                    socket.send_to(&error_bytes, src)?;
                 }
             },
             Err(err) => {
