@@ -1,0 +1,34 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y dnsutils && rm -rf /var/lib/apt/lists/*
+
+COPY target/debian/*.deb /tmp/
+
+COPY <<'EOF' /test.sh
+#!/bin/bash
+set -e
+
+echo "Testing SwiftDNS package installation..."
+
+dpkg -i /tmp/*.deb || exit 1
+
+# We need to run a command before the configuration file is created
+swiftdns demo facebook.com
+
+test -f /etc/swiftdns/config.toml || exit 1
+test -f /usr/bin/swiftdns || exit 1
+test -f /lib/systemd/system/swiftdns.service || exit 1
+
+# Test basic functionality
+swiftdns --help >/dev/null
+swiftdns demo google.com | grep -q "not blacklisted\|blacklisted"
+
+echo "✅ Package installation test passed!"
+echo "  ✓ Package installs without errors"
+echo "  ✓ Configuration file created"
+echo "  ✓ Binary is functional"
+echo "  ✓ Systemd service file installed"
+EOF
+
+RUN chmod +x /test.sh
+CMD ["/test.sh"]
