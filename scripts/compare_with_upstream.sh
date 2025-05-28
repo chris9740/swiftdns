@@ -3,6 +3,8 @@
 # DNS Resolver Comparison Script
 # Compares your SwiftDNS resolver against Cloudflare (1.1.1.1)
 
+# I typically save the output to "comparison.txt" and ask AI to analyze it.
+
 # Configuration
 YOUR_RESOLVER="127.0.0.1"
 YOUR_PORT="5053"
