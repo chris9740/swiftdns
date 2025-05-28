@@ -13,11 +13,31 @@ For those seeking an extra layer of privacy, Swiftdns also offers the option to 
 ### Prerequisites
 
 -   systemd
+-   Rust toolchain (for compilation)
 
-To install Swiftdns, first download the .deb file from the [release page](https://github.com/chris9740/swiftdns/releases/latest).
-Then, install it using your preferred method (e.g., `dpkg -i swiftdns.deb`).
+### Installation Steps
 
-Don't forget to configure your computer to use Swiftdns as a resolver.
+1. **Clone the repository:**
+
+    ```bash
+    git clone https://github.com/chris9740/swiftdns.git
+    cd swiftdns
+    ```
+
+2. **Build and create the package:**
+
+    ```bash
+    make package
+    ```
+
+3. **Install the package:**
+
+    ```bash
+    sudo dpkg -i target/debian/swiftdns_*.deb
+    ```
+
+4. **Configure your system to use Swiftdns:**
+   Set your system's DNS resolver to `127.0.0.1` to route queries through Swiftdns.
 
 ## Features
 
