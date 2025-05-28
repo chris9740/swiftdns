@@ -14,29 +14,41 @@ For those seeking an extra layer of privacy, Swiftdns also offers the option to 
 
 -   systemd
 -   Rust toolchain (for compilation)
+-   `cargo-deb` (for creating .deb packages)
 
 ### Installation Steps
 
-1. **Clone the repository:**
+1. **Install Rust and cargo-deb:**
+
+    ```bash
+    # Install Rust
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    source $HOME/.cargo/env
+
+    # Install cargo-deb
+    cargo install cargo-deb
+    ```
+
+2. **Clone the repository:**
 
     ```bash
     git clone https://github.com/chris9740/swiftdns.git
     cd swiftdns
     ```
 
-2. **Build and create the package:**
+3. **Build and create the package:**
 
     ```bash
     make package
     ```
 
-3. **Install the package:**
+4. **Install the package:**
 
     ```bash
     sudo dpkg -i target/debian/swiftdns_*.deb
     ```
 
-4. **Configure your system to use Swiftdns:**
+5. **Configure your system to use Swiftdns:**
    Set your system's DNS resolver to `127.0.0.1` to route queries through Swiftdns.
 
 ## Features
