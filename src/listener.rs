@@ -12,11 +12,10 @@ use hickory_proto::{
 use crate::{
     cache::Cache,
     config::{Scope, SwiftConfig},
-    dns,
     error::DnsError,
     filter,
     http::Client,
-    Domain,
+    upstream, Domain,
 };
 
 fn create_response_base(message: &Message) -> Message {
@@ -70,7 +69,7 @@ async fn handle_message(
         return Ok(response);
     }
 
-    let resolved_response = dns::resolver::resolve(client, config, message).await?;
+    let resolved_response = upstream::resolve(client, config, message).await?;
 
     cache.insert(query.name(), query.query_type(), &resolved_response);
 

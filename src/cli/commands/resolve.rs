@@ -9,7 +9,7 @@ use std::io::Write;
 use std::{str::FromStr, time::Instant};
 use tabwriter::TabWriter;
 
-use crate::{config::SwiftConfig, dns, filter, http::Client, Domain};
+use crate::{config::SwiftConfig, filter, http::Client, upstream, Domain};
 
 #[derive(Args)]
 pub struct ResolveArgs {
@@ -66,7 +66,7 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
         config.resolver.url.as_str()
     };
 
-    let response = dns::resolver::resolve(&client, &config, &message).await?;
+    let response = upstream::resolve(&client, &config, &message).await?;
     let elapsed = query_start_time.elapsed().as_millis();
 
     // Check response code first
