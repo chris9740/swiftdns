@@ -65,6 +65,23 @@ For those seeking an extra layer of privacy, Swiftdns also offers the option to 
 
 Swiftdns will look for our blacklist rules inside `.list` files located in `/etc/swiftdns/filters/` and any of its immediate subdirectories, in case you want to organize your rules.
 
+### Getting Started with Preset Filters
+
+If you want to get started quickly with some common blocking rules, you can copy the preset filters from the repository:
+
+```bash
+# Copy all preset filters (optional)
+sudo cp assets/filters/*.list /etc/swiftdns/filters/
+
+# Or copy specific preset filters
+sudo cp assets/filters/meta.list /etc/swiftdns/filters/
+sudo cp assets/filters/nsfw.list /etc/swiftdns/filters/
+```
+
+**Note:** These are example filters - review them first to make sure they match your needs.
+
+### Creating Custom Filters
+
 Knowing this, let's create a `google.list` file to make sure we never accidentally use `google.com` for searching, while still being able to visit subdomains such as `maps.google.com` and `translate.google.com`.
 
 Inside our newly created `/etc/swiftdns/filters/google.list` file, we will enter the following:
