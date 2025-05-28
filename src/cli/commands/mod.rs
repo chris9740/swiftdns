@@ -1,4 +1,3 @@
-pub mod check;
 pub mod demo;
 pub mod filters;
 pub mod resolve;

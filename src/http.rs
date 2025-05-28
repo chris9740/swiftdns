@@ -12,7 +12,7 @@ pub struct Client {
 
 impl Client {
     pub async fn connect(config: &SwiftConfig) -> Result<Self> {
-        if std::env::var("SWIFTDNS_TEST_MODE").is_ok() {
+        if std::env::var("SWIFTDNS_CLI_TEST_MODE").is_ok() {
             return Ok(Self {
                 client: reqwest::Client::new(),
             });
@@ -121,7 +121,7 @@ mod tests {
     fn test_client_creation() {
         let config = SwiftConfig {
             resolver: ResolverConfig {
-                url: "https://dns.swiftdns.mock/dns-query?name={name}&type={type}".to_string(),
+                url: "https://dns.swiftdns.mock/dns-query".to_string(),
                 bootstrap_ips: None,
             },
             tor: TorConfig {

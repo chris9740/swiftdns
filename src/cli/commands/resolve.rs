@@ -1,15 +1,15 @@
 use anyhow::Result;
 use clap::Args;
-use std::time::Instant;
-
-use crate::{
-    config::SwiftConfig,
-    dns::{self, message_types::DnsJsonQuestion, record_types::SupportedRecordType},
-    domain::DnsName,
-    error::DnsError,
-    filter,
-    http::Client,
+use colored::*;
+use hickory_proto::{
+    op::{Message, MessageType, OpCode, Query},
+    rr::{Name, RecordType},
 };
+use std::io::Write;
+use std::{str::FromStr, time::Instant};
+use tabwriter::TabWriter;
+
+use crate::{config::SwiftConfig, dns, filter, http::Client, Domain};
 
 #[derive(Args)]
 pub struct ResolveArgs {
@@ -17,18 +17,19 @@ pub struct ResolveArgs {
         name = "name",
         help = "Domain to resolve",
         required = true,
-        value_parser = clap::value_parser!(DnsName)
+        value_parser = clap::value_parser!(Domain)
     )]
-    pub domain: DnsName,
+    pub domain: Domain,
 
     #[arg(
         name = "type",
         help = "The type of record to query for",
         required = false,
-        value_parser = clap::value_parser!(SupportedRecordType),
-        default_value_t = SupportedRecordType::A
+        value_parser = clap::value_parser!(RecordType),
+        default_value = "A",
+        default_value_t = RecordType::A,
     )]
-    pub qtype: SupportedRecordType,
+    pub qtype: RecordType,
 
     #[arg(long = "tor", help = "Route through Tor", action = clap::ArgAction::SetTrue)]
     pub tor: bool,
@@ -40,64 +41,117 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
         config.tor.enabled = true;
     }
 
-    let mut client = Client::connect(&config).await?;
+    let client = Client::connect(&config).await?;
 
-    if let Some(entry) = filter::blacklist::find(&args.domain.name()) {
+    if let Some(entry) = filter::blacklist::find(args.domain.name()) {
         println!("{}", entry.format_log_message(&args.domain));
         return Ok(());
     }
 
     let query_start_time = Instant::now();
 
-    let question = DnsJsonQuestion {
-        name: args.domain.name().to_string(),
-        qtype: args.qtype.value(),
-        dnssec: None,
-    };
+    let mut message = Message::new();
+    message.set_id(rand::random());
+    message.set_message_type(MessageType::Query);
+    message.set_op_code(OpCode::Query);
+    message.set_recursion_desired(true);
 
-    let upstream_dns = if std::env::var("SWIFTDNS_TEST_MODE").is_ok() {
+    let query = Query::query(Name::from_str(args.domain.name())?, args.qtype);
+
+    message.add_query(query);
+
+    let upstream_dns = if std::env::var("SWIFTDNS_CLI_TEST_MODE").is_ok() {
         "https://dns.swiftdns.mock/dns-query"
     } else {
         config.resolver.url.as_str()
     };
 
-    Ok(dns::resolver::resolve(&mut client, &config, &question)
-        .await
-        .map_or_else(
-            |err| {
-                println!("Error: {err}");
-                Err(err)
-            },
-            |response| {
-                if response.answer.is_empty() {
-                    println!("{}: No DNS records found", args.domain);
-                    return Ok(());
-                }
+    let response = dns::resolver::resolve(&client, &config, &message).await?;
+    let elapsed = query_start_time.elapsed().as_millis();
 
-                let elapsed = query_start_time.elapsed().as_millis();
-                let output = match response.format_output() {
-                    Ok(output) => output,
-                    Err(err) => {
-                        return Err(DnsError::OutputError(err));
-                    }
-                };
-                let record_count = response.answer.len();
+    // Check response code first
+    match response.response_code() {
+        hickory_proto::op::ResponseCode::NXDomain => {
+            println!("{}: Domain does not exist", args.domain);
+            return Ok(());
+        }
+        hickory_proto::op::ResponseCode::ServFail => {
+            println!("{}: Server failure", args.domain);
+            return Ok(());
+        }
+        hickory_proto::op::ResponseCode::Refused => {
+            println!("{}: Query refused", args.domain);
+            return Ok(());
+        }
+        hickory_proto::op::ResponseCode::NoError => {
+            // Continue to check answers
+        }
+        other => {
+            println!("{}: DNS error: {:?}", args.domain, other);
+            return Ok(());
+        }
+    }
 
-                let url = url::Url::parse(upstream_dns)
-                    .expect("Resolver URL should have been validated earlier");
+    if response.answers().is_empty() {
+        println!("{}: No {} records found", args.domain, args.qtype);
+        return Ok(());
+    }
 
-                println!("Upstream DNS: {}", url.host_str().unwrap_or("unknown"));
-                println!();
-                println!("{output}");
-                println!(
-                    "({record_count} {} found, query time: {elapsed}ms)",
-                    if record_count == 1 {
-                        "record"
-                    } else {
-                        "records"
-                    }
-                );
-                Ok(())
-            },
-        )?)
+    let record_count = response.answers().len();
+    let url = url::Url::parse(upstream_dns)?;
+
+    println!("Upstream DNS: {}", url.host_str().unwrap_or("unknown"));
+    println!();
+
+    let mut tw = TabWriter::new(vec![]);
+    let headers = vec!["domain", "type", "ttl", "data"];
+
+    writeln!(tw, "{}", headers.join("\t"))?;
+
+    for record in response.answers() {
+        let record_type = record.record_type();
+        let name = record.name();
+        let ttl = record.ttl();
+        let data = record.data();
+
+        writeln!(
+            tw,
+            "{}\t{} ({})\t{}\t{}",
+            name,
+            record_type,
+            u16::from(record_type),
+            ttl,
+            data
+        )?;
+    }
+
+    tw.flush()?;
+    let formatted = String::from_utf8(tw.into_inner()?)?;
+    let mut lines = formatted.lines();
+    if let Some(header_line) = lines.next() {
+        let mut colored_header = header_line.to_string();
+        for header in &headers {
+            colored_header = colored_header.replace(
+                header,
+                &header.on_truecolor(190, 190, 190).black().to_string(),
+            );
+        }
+        println!("{}", colored_header);
+
+        for line in lines {
+            println!("{}", line);
+        }
+    }
+
+    println!();
+    println!(
+        "({record_count} {} found, query time: {elapsed}ms)",
+        if record_count == 1 {
+            "record"
+        } else {
+            "records"
+        }
+    );
+
+    Ok(())
 }

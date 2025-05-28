@@ -2,7 +2,7 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 
 fn test_command() -> Command {
-    std::env::set_var("SWIFTDNS_TEST_MODE", "1");
+    std::env::set_var("SWIFTDNS_CLI_TEST_MODE", "1");
     Command::cargo_bin("swiftdns").unwrap()
 }
 
@@ -57,16 +57,16 @@ fn test_resolve_command() {
 
     assert
         .success()
-        .stdout(predicate::str::contains("No DNS records found"));
+        .stdout(predicate::str::contains("Domain does not exist"));
 
     let mut cmd = test_command();
     let assert = cmd.arg("resolve").arg("example.com").arg("AAAA").assert();
 
     assert
         .success()
-        .stdout(predicate::str::contains("No DNS records found"));
+        .stdout(predicate::str::contains("DNS error: NotImp"));
 
-    std::env::remove_var("SWIFTDNS_TEST_MODE");
+    std::env::remove_var("SWIFTDNS_CLI_TEST_MODE");
 }
 
 #[test]
@@ -98,5 +98,5 @@ fn test_start_command() {
         .stdout(predicate::str::contains("Starting DNS server"))
         .stdout(predicate::str::contains("Server scope: All interfaces"));
 
-    std::env::remove_var("SWIFTDNS_TEST_MODE");
+    std::env::remove_var("SWIFTDNS_CLI_TEST_MODE");
 }

@@ -16,8 +16,6 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    #[command(about = "Check DNS resolver health and performance")]
-    Check(commands::check::CheckArgs),
     #[command(about = "Test if a domain would be blocked by the blacklist")]
     Demo(commands::demo::DemoArgs),
     #[command(about = "Start the DNS listener")]
@@ -35,7 +33,6 @@ pub async fn start() -> Result<()> {
     crate::filter::migrate_filters()?;
 
     match args.command {
-        Commands::Check(args) => commands::check::execute(args, &config).await,
         Commands::Demo(args) => commands::demo::execute(args).await,
         Commands::Start(args) => commands::start::execute(args, &config).await,
         Commands::Resolve(args) => commands::resolve::execute(args, &config).await,

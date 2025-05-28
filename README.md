@@ -135,8 +135,8 @@ The `[resolver]` section defines which DNS-over-HTTPS provider Swiftdns will use
 
 ```toml
 [resolver]
-# The DoH URL with placeholders for name and type
-url = "https://1.1.1.1/dns-query?name={name}&type={type}"
+# The DoH URL for DNS-over-HTTPS queries
+url = "https://1.1.1.1/dns-query"
 
 # Optional: IP addresses to directly connect to (bypassing system DNS)
 # Used when the URL contains a domain name that needs to be resolved
@@ -149,21 +149,21 @@ bootstrap_ips = []  # Example: ["45.90.28.0", "45.90.30.0"] for NextDNS
 
 ```toml
 [resolver]
-url = "https://1.1.1.1/dns-query?name={name}&type={type}"
+url = "https://1.1.1.1/dns-query"
 ```
 
 **Cloudflare Family (Blocks malware and adult content)**
 
 ```toml
 [resolver]
-url = "https://1.1.1.3/dns-query?name={name}&type={type}"
+url = "https://1.1.1.3/dns-query"
 ```
 
 **NextDNS with Custom Profile ID**
 
 ```toml
 [resolver]
-url = "https://dns.nextdns.io/abc123?name={name}&type={type}"
+url = "https://dns.nextdns.io/abc123/dns-query"
 bootstrap_ips = ["45.90.28.0", "45.90.30.0"]
 ```
 
@@ -171,7 +171,7 @@ bootstrap_ips = ["45.90.28.0", "45.90.30.0"]
 
 ```toml
 [resolver]
-url = "https://8.8.8.8/resolve?name={name}&type={type}"
+url = "https://8.8.8.8/dns-query"
 ```
 
 ### Tor Configuration
@@ -208,22 +208,6 @@ $ swiftdns resolve <domain> [type: A] [--tor]
 
 ---
 
-### Check
-
-Test your DNS resolver configuration by performing lookups for a set of domains to verify it's working correctly.
-
-```bash
-$ swiftdns check [--tor]
-```
-
-This will display a table showing each test domain, the response time, number of answers received, TTL, and the first result.
-
-**Flags**:
-
-`--tor`: Boolean flag to also test Tor connectivity.
-
----
-
 ### Filters
 
 List all the active filters that Swiftdns is currently using.
@@ -233,6 +217,18 @@ $ swiftdns filters
 ```
 
 This will display a numbered list of all filters, showing their names and file paths.
+
+---
+
+### Demo
+
+Test if a domain would be blocked by the current filters without actually sending a DNS query.
+
+```bash
+$ swiftdns demo <domain>
+```
+
+This command will output whether the domain is blocked or not, without sending any queries to the DNS provider.
 
 ---
 

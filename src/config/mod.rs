@@ -73,7 +73,7 @@ impl Default for SwiftConfig {
             scope: Some(Scope::Local),
             address: "127.0.0.1:53".parse().unwrap(),
             resolver: ResolverConfig {
-                url: "https://1.1.1.1/dns-query?name={name}&type={type}".to_string(),
+                url: "https://1.1.1.1/dns-query".to_string(),
                 bootstrap_ips: None,
             },
             tor: TorConfig {
@@ -88,6 +88,13 @@ impl SwiftConfig {
     pub fn validate(&self) -> Result<(), ConfigError> {
         match url::Url::parse(&self.resolver.url) {
             Ok(url) => {
+                if url.as_str().contains("{name}") || url.as_str().contains("{type}") {
+                    return Err(ConfigError::InvalidResolverUrl(
+                        format!("JSON-style URLs with {{name}} and {{type}} placeholders are no longer supported: {}", 
+                        self.resolver.url)
+                    ));
+                }
+
                 if url.scheme() != "https" && url.host_str() != Some("127.0.0.1") {
                     return Err(ConfigError::InvalidResolverScheme(
                         self.resolver.url.clone(),

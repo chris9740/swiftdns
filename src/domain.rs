@@ -148,10 +148,6 @@ impl FromStr for Domain {
         let domain = s.to_lowercase();
         let domain = domain.trim();
 
-        if s == "." {
-            return Ok(Domain(".".to_string()));
-        }
-
         // Fully qualified domain names (FQDN) end with an extra dot,
         // representing an empty label (e.g. "www.example.com.").
         //

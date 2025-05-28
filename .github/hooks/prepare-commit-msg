@@ -69,13 +69,13 @@ validate_commit_message() {
     fi
 
     for prefix in "${PREFIXES[@]}"; do
-        if [[ $commit_message =~ ^$prefix: || $commit_message =~ ^$prefix"(".*")" ]]; then
+        if [[ $commit_message =~ ^$prefix!?: || $commit_message =~ ^$prefix!?"(".*")" ]]; then
             return
         fi
     done
 
     print_error_with_message "message does not follow constraints"
-    print_generic_error "a valid message must be either a merge message, or have a valid prefix (e.g. \"${GREEN}fix: ...${COLOR_OFF}\" or \"${GREEN}feat(filter): ...${COLOR_OFF}\")"
+    print_generic_error "a valid message must be either a merge message, or have a valid prefix (e.g. \"${GREEN}fix: ...${COLOR_OFF}\", \"${GREEN}feat!: ...${COLOR_OFF}\", or \"${GREEN}feat(filter): ...${COLOR_OFF}\")"
     exit 1
 }
 

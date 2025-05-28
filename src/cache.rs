@@ -1,20 +1,24 @@
+use chrono::{DateTime, Duration, Local};
+use hickory_proto::{
+    op::Message,
+    rr::{Name, RecordType},
+};
 use std::collections::HashMap;
 
-use chrono::{DateTime, Duration, Local};
-
-use crate::{
-    dns::message_types::{DnsJsonQuestion, DnsJsonResponse},
-    error::DnsError,
-};
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
+pub struct CacheKey {
+    pub name: Name,
+    pub record_type: RecordType,
+}
 
 #[derive(Clone, Debug)]
 pub struct CacheEntry {
+    pub response: Message,
     pub expires_at: DateTime<Local>,
-    pub response: DnsJsonResponse,
 }
 
 pub struct Cache {
-    hash_map: HashMap<DnsJsonQuestion, CacheEntry>,
+    entries: HashMap<CacheKey, CacheEntry>,
     last_cleanup: DateTime<Local>,
     cleanup_interval: Duration,
 }
@@ -25,67 +29,68 @@ impl Default for Cache {
     }
 }
 
-impl Cache {
-    pub fn new() -> Cache {
-        let hash_map = HashMap::new();
+const FIVE_MINUTES: u32 = 300;
 
-        Cache {
-            hash_map,
+impl Cache {
+    pub fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
             last_cleanup: Local::now(),
             cleanup_interval: Duration::seconds(60),
         }
     }
 
-    pub fn get(&mut self, question: &DnsJsonQuestion) -> Result<Option<CacheEntry>, DnsError> {
-        self.cleanup()?;
+    pub fn get(&mut self, name: &Name, record_type: RecordType) -> Option<Message> {
+        self.cleanup();
 
-        Ok(self
-            .hash_map
-            .get(question)
+        let key = CacheKey {
+            name: name.clone(),
+            record_type,
+        };
+
+        self.entries
+            .get(&key)
             .filter(|entry| entry.expires_at > Local::now())
-            .cloned())
+            .map(|entry| entry.response.clone())
     }
 
-    pub fn set(
-        &mut self,
-        question: DnsJsonQuestion,
-        response: DnsJsonResponse,
-    ) -> Result<(), DnsError> {
+    pub fn insert(&mut self, name: &Name, record_type: RecordType, response: &Message) {
         let ttl = response
-            .answer
+            .answers()
             .iter()
-            .map(|a| a.ttl)
-            .filter(|&t| t > 0)
+            .map(|record| record.ttl())
+            .filter(|&ttl| ttl > 0)
             .min()
-            .or_else(|| {
-                response
-                    .authority
-                    .as_ref()?
-                    .iter()
-                    .map(|a| a.ttl)
-                    .filter(|&t| t > 0)
-                    .min()
-            })
-            .unwrap_or(300);
+            .unwrap_or(FIVE_MINUTES);
 
         let expires_at = Local::now() + Duration::seconds(ttl as i64);
 
+        let key = CacheKey {
+            name: name.clone(),
+            record_type,
+        };
+
         let entry = CacheEntry {
-            response,
+            response: response.clone(),
             expires_at,
         };
 
-        self.hash_map.insert(question, entry);
-
-        Ok(())
+        self.entries.insert(key, entry);
     }
 
-    pub fn cleanup(&mut self) -> Result<(), DnsError> {
+    fn cleanup(&mut self) {
         let now = Local::now();
         if now - self.last_cleanup > self.cleanup_interval {
-            self.hash_map.retain(|_, entry| entry.expires_at > now);
+            self.entries.retain(|_, entry| entry.expires_at > now);
             self.last_cleanup = now;
         }
-        Ok(())
+    }
+
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
     }
 }

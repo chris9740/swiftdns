@@ -34,5 +34,17 @@ pub async fn execute(args: StartArgs, config: &SwiftConfig) -> Result<()> {
         config.scope = Some(scope);
     }
 
+    if std::env::var("SWIFTDNS_CLI_TEST_MODE").is_ok() {
+        println!("Starting DNS server on {}", addr);
+
+        if config.scope == Some(Scope::Local) {
+            println!("Server scope: Local only");
+        } else {
+            println!("Server scope: All interfaces");
+        }
+
+        return Ok(());
+    }
+
     listener::start(&addr, &config).await
 }
