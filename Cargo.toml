@@ -1,6 +1,6 @@
 [package]
 name = "swiftdns"
-version = "0.15.0"
+version = "0.15.1"
 authors = ["chris9740"]
 edition = "2021"
 description = "Local DNS resolver with DoH, Tor routing, and privacy filtering"
@@ -49,7 +49,7 @@ maintainer-scripts = "debian/"
 systemd-units = { enable = true }
 assets = [
     [
-        "target/x86_64-unknown-linux-gnu/release/swiftdns",
+        "target/release/swiftdns",
         "/usr/bin/",
         "755",
     ],
