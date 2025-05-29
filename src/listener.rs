@@ -56,7 +56,8 @@ async fn handle_message(
         ResponseCode::FormErr
     );
 
-    if filter::blacklist::find(&domain.name()).is_some() {
+    if let Some(filter) = filter::blacklist::find(&domain.name()) {
+        eprintln!("{}", filter.format_log_message(&domain));
         response.set_response_code(ResponseCode::Refused);
         return Ok(response);
     }
