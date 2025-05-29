@@ -113,7 +113,7 @@ pub mod whitelist {
             return None;
         }
 
-        super::enumerate(&whitelist_path, name)
+        super::enumerate(&whitelist_path, name).ok().flatten()
     }
 }
 
@@ -127,17 +127,15 @@ pub mod blacklist {
             return None;
         }
 
-        let filters = super::load_filters().unwrap();
+        let filters = super::load_filters().ok()?;
 
         let blacklists = filters
             .iter()
             .filter(|filter| filter.filename != "whitelist.list");
 
         for filter in blacklists {
-            let result = super::enumerate(&filter.path, name);
-
-            if result.is_some() {
-                return result;
+            if let Ok(Some(result)) = super::enumerate(&filter.path, name) {
+                return Some(result);
             }
         }
 
@@ -146,12 +144,12 @@ pub mod blacklist {
 }
 
 /// Enumerates the file and matches patterns against the domain name
-fn enumerate<T>(path: &PathBuf, name: &str) -> Option<FilterEntry<T>> {
-    let file = File::open(path).unwrap();
+fn enumerate<T>(path: &PathBuf, name: &str) -> Result<Option<FilterEntry<T>>> {
+    let file = File::open(path).context("Failed to open filter file")?;
     let reader = BufReader::new(file);
 
     for (index, entry) in reader.lines().enumerate() {
-        let line = entry.unwrap();
+        let line = entry.context("Failed to read line from filter file")?;
         let pattern = line.trim();
 
         if pattern.starts_with('#') || pattern.is_empty() {
@@ -164,12 +162,12 @@ fn enumerate<T>(path: &PathBuf, name: &str) -> Option<FilterEntry<T>> {
 
         if let Some(domain_pattern) = pattern.strip_prefix('^') {
             if WildMatch::new(domain_pattern).matches(name) {
-                return Some(FilterEntry {
+                return Ok(Some(FilterEntry {
                     file: filename,
                     pattern: pattern.to_string(),
                     line: line_number,
                     _marker: PhantomData,
-                });
+                }));
             }
         }
 
@@ -177,16 +175,16 @@ fn enumerate<T>(path: &PathBuf, name: &str) -> Option<FilterEntry<T>> {
 
         if WildMatch::new(pattern).matches(name) || WildMatch::new(&subdomain_pattern).matches(name)
         {
-            return Some(FilterEntry {
+            return Ok(Some(FilterEntry {
                 file: filename,
                 pattern: pattern.to_string(),
                 line: line_number,
                 _marker: PhantomData,
-            });
+            }));
         }
     }
 
-    None
+    Ok(None)
 }
 
 #[cfg(test)]
