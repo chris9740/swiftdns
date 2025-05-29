@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File},
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader},
     marker::PhantomData,
     path::{Path, PathBuf},
 };
@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Context, Result};
 use wildmatch::WildMatch;
 
-use crate::{config::get_config_path, domain::DnsName};
+use crate::domain::DnsName;
 
 #[derive(serde::Serialize, Debug)]
 pub struct Filter {
@@ -187,60 +187,6 @@ fn enumerate<T>(path: &PathBuf, name: &str) -> Option<FilterEntry<T>> {
     }
 
     None
-}
-
-/// Initiates a migration process for filter files to update their formatting or content.
-///
-/// Checks if a migration is needed by looking for a '.migrated' marker file. If not found,
-/// it reads each filter file, updates lines according to specified rules, and writes the changes back.
-/// It finally creates a '.migrated' file to mark completion.
-pub fn migrate_filters() -> Result<()> {
-    let migration_marker_path = get_config_path().join("filters/.migrated");
-
-    if migration_marker_path.exists() {
-        return Ok(());
-    }
-
-    let filters = load_filters()?;
-
-    for filter in filters {
-        let mut updated_lines: Vec<String> = Vec::new();
-
-        for line in filter.contents.lines() {
-            let line = line.trim().to_string();
-
-            if let Some(stripped_line) = line.strip_prefix("**.") {
-                updated_lines.push(stripped_line.to_string());
-                continue;
-            }
-
-            if line.starts_with('#')
-                || line.is_empty()
-                || line.starts_with('*')
-                || line.starts_with('^')
-            {
-                updated_lines.push(line);
-                continue;
-            }
-
-            updated_lines.push(format!("^{line}"));
-        }
-
-        let mut file = File::create(filter.path)?;
-
-        for line in updated_lines {
-            writeln!(file, "{}", line)?;
-        }
-    }
-
-    let mut migration_marker = File::create(migration_marker_path)?;
-
-    writeln!(
-        migration_marker,
-        "This file is used to indicate that the filter migration has been completed"
-    )?;
-
-    Ok(())
 }
 
 #[cfg(test)]

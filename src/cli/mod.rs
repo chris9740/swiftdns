@@ -30,8 +30,6 @@ pub async fn start() -> Result<()> {
     let args = Cli::parse();
     let config = crate::config::get_config()?;
 
-    crate::filter::migrate_filters()?;
-
     match args.command {
         Commands::Demo(args) => commands::demo::execute(args).await,
         Commands::Start(args) => commands::start::execute(args, &config).await,
