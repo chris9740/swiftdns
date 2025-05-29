@@ -5,7 +5,10 @@ use hickory_proto::{
     op::{Message, MessageType, OpCode, Query},
     rr::{Name, RecordType},
 };
-use std::io::Write;
+use std::{
+    io::Write,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use std::{str::FromStr, time::Instant};
 use tabwriter::TabWriter;
 
@@ -50,8 +53,13 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
 
     let query_start_time = Instant::now();
 
+    let id = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as u16;
+
     let mut message = Message::new();
-    message.set_id(rand::random());
+    message.set_id(id);
     message.set_message_type(MessageType::Query);
     message.set_op_code(OpCode::Query);
     message.set_recursion_desired(true);

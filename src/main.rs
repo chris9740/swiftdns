@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::{io::ErrorKind, process};
 use swiftdns::cli;
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     if let Err(err) = cli::start().await {
         if let Some(io_err) = err.downcast_ref::<std::io::Error>() {

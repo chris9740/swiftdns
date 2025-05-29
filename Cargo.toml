@@ -6,18 +6,21 @@ edition = "2021"
 description = "Local DNS resolver with DoH, Tor routing, and privacy filtering"
 license-file = "LICENSE"
 
+[profile.release]
+strip = true
+lto = true
+opt-level = "z"
+codegen-units = 1
+
 [dependencies]
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
+clap = { version = "4.0", features = ["derive", "cargo"] }
 reqwest = { version = "0.11", default-features = false, features = [
-    "blocking",
-    "json",
     "socks",
     "rustls-tls",
 ] }
-serde = { version = "1.0.159", features = ["derive"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-clap = { version = "4.0", features = ["derive", "cargo"] }
-strum = { version = "0.24.1", features = ["derive"] }
-hickory-proto = { version = "0.25.2", features = ["__dnssec", "dnssec-ring"] }
+serde = { version = "1.0.159", default-features = false, features = ["derive"] }
+hickory-proto = { version = "0.25.2", default-features = false }
 bytes = "1.4.0"
 wildmatch = "2.1.1"
 chrono = "0.4.24"
@@ -25,15 +28,11 @@ tabwriter = "1.2.1"
 idna = "0.4.0"
 anyhow = "1.0.72"
 colored = "2.0.4"
-once_cell = "1.21.3"
 toml = "0.8.22"
 thiserror = "2.0.12"
-crossterm = "0.29.0"
 tokio-rustls = "0.24"
-rustls = "0.21"
 rustls-native-certs = "0.6"
 url = "2.5.4"
-rand = "0.9.1"
 
 [dev-dependencies]
 assert_cmd = "2.0.17"
