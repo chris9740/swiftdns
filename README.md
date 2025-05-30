@@ -15,18 +15,22 @@ For those seeking an extra layer of privacy, Swiftdns also offers the option to 
 -   systemd
 -   Rust toolchain (for compilation)
 -   `cargo-deb` (for creating .deb packages)
+-   `sccache`, `mold`, `clang` (for building the project)
 
 ### Installation Steps
 
-1. **Install Rust and cargo-deb:**
+1. **Install Rust, cargo-deb, sccache, and other dependencies:**
 
     ```bash
     # Install Rust
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
     source $HOME/.cargo/env
 
-    # Install cargo-deb
-    cargo install cargo-deb
+    # Install cargo-deb and sccache
+    cargo install cargo-deb sccache
+
+    # Install mold and clang
+    sudo apt install mold clang
     ```
 
 2. **Clone the repository:**
