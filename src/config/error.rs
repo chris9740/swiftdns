@@ -21,9 +21,6 @@ pub enum ConfigError {
     #[error("Invalid resolver URL: {0}")]
     InvalidResolverUrl(String),
 
-    #[error("Invalid scope: {0}")]
-    InvalidScope(String),
-
     #[error("Invalid socket address: {0}")]
     AddrParseError(#[from] std::net::AddrParseError),
 }

@@ -43,34 +43,14 @@ pub struct ResolverConfig {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SwiftConfig {
-    pub scope: Option<Scope>,
     pub address: SocketAddr,
     pub resolver: ResolverConfig,
     pub tor: TorConfig,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub enum Scope {
-    Global,
-    Local,
-}
-
-impl FromStr for Scope {
-    type Err = ConfigError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "global" => Ok(Scope::Global),
-            "local" => Ok(Scope::Local),
-            _ => Err(ConfigError::InvalidScope(s.to_string())),
-        }
-    }
-}
-
 impl Default for SwiftConfig {
     fn default() -> Self {
         Self {
-            scope: Some(Scope::Local),
             address: "127.0.0.1:53".parse().unwrap(),
             resolver: ResolverConfig {
                 url: "https://1.1.1.1/dns-query".to_string(),

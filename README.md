@@ -173,10 +173,9 @@ After saving your configuration file, run `systemctl restart swiftdns` to have t
 
 ### General Configuration
 
-| Key     | Default        | Value(s)                   | Description                                                           |
-| ------- | -------------- | -------------------------- | --------------------------------------------------------------------- |
-| scope   | `Local`        | One of `Local`, `Global`   | If scope is `Local`, only queries sent from loopback will be accepted |
-| address | `127.0.0.1:53` | A socket address with port | The address to bind the listener to                                   |
+| Key     | Default        | Value(s)                   | Description                         |
+| ------- | -------------- | -------------------------- | ----------------------------------- |
+| address | `127.0.0.1:53` | A socket address with port | The address to bind the listener to |
 
 ### Resolver Configuration
 

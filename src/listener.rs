@@ -10,12 +10,7 @@ use hickory_proto::{
 };
 
 use crate::{
-    cache::Cache,
-    config::{Scope, SwiftConfig},
-    domain::DnsName,
-    error::DnsError,
-    filter,
-    http::Client,
+    cache::Cache, config::SwiftConfig, domain::DnsName, error::DnsError, filter, http::Client,
     upstream,
 };
 
@@ -101,7 +96,7 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
         let mut buf = [0; 512];
         let (amt, src) = socket.recv_from(&mut buf)?;
 
-        if config.scope == Some(Scope::Local) && !src.ip().is_loopback() {
+        if !src.ip().is_loopback() {
             eprintln!("Received non-local request from {src}");
             continue;
         }

@@ -1,6 +1,5 @@
 # Configuration file used in development
 
-scope = "Local"
 address = "127.0.0.1:5053"
 
 [resolver]

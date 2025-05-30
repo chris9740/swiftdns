@@ -68,35 +68,3 @@ fn test_resolve_command() {
 
     std::env::remove_var("SWIFTDNS_CLI_TEST_MODE");
 }
-
-#[test]
-fn test_start_command() {
-    let mut cmd = test_command();
-    let assert = cmd.arg("start").assert();
-
-    assert
-        .success()
-        .stdout(predicate::str::contains("Starting DNS server on"))
-        .stdout(predicate::str::contains("Server scope: Local only"));
-
-    let mut cmd = test_command();
-    let assert = cmd
-        .arg("start")
-        .arg("--address")
-        .arg("127.0.0.1:5353")
-        .assert();
-
-    assert.success().stdout(predicate::str::contains(
-        "Starting DNS server on 127.0.0.1:5353",
-    ));
-
-    let mut cmd = test_command();
-    let assert = cmd.arg("start").arg("--scope").arg("global").assert();
-
-    assert
-        .success()
-        .stdout(predicate::str::contains("Starting DNS server"))
-        .stdout(predicate::str::contains("Server scope: All interfaces"));
-
-    std::env::remove_var("SWIFTDNS_CLI_TEST_MODE");
-}
