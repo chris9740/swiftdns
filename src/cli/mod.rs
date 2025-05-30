@@ -22,6 +22,8 @@ pub enum Commands {
     Start(commands::start::StartArgs),
     #[command(about = "Resolve a domain name")]
     Resolve(commands::resolve::ResolveArgs),
+    #[command(about = "Show the status of the DNS server")]
+    Status,
 }
 
 pub async fn start() -> Result<()> {
@@ -32,5 +34,6 @@ pub async fn start() -> Result<()> {
         Commands::Demo(args) => commands::demo::execute(args).await,
         Commands::Start(args) => commands::start::execute(args, &config).await,
         Commands::Resolve(args) => commands::resolve::execute(args, &config).await,
+        Commands::Status => commands::status::execute(&config).await,
     }
 }
