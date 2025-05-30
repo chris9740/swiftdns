@@ -53,7 +53,7 @@ For those seeking an extra layer of privacy, Swiftdns also offers the option to 
     ```
 
 5. **Configure your system to use Swiftdns:**
-   Set your system's DNS resolver to `127.0.0.1` to route queries through Swiftdns.
+   Set your system's DNS resolver to `127.0.0.1` to route queries through Swiftdns. Make sure you don't have any fallback DNS resolvers configured. If Swiftdns refuses to resolve a blacklisted domain, the client might continue to use the fallback resolvers, which would lead to privacy leaks.
 
 ## Features
 
