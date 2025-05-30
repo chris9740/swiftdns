@@ -38,7 +38,7 @@ pub async fn execute(config: &SwiftConfig) -> Result<()> {
 
     tw.flush()?;
     let formatted_output = String::from_utf8(tw.into_inner()?)?;
-    println!("{}", formatted_output);
+    print!("{}", formatted_output);
 
     Ok(())
 }

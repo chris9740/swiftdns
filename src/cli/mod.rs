@@ -22,7 +22,7 @@ pub enum Commands {
     Start(commands::start::StartArgs),
     #[command(about = "Resolve a domain name")]
     Resolve(commands::resolve::ResolveArgs),
-    #[command(about = "Show the status of the DNS server")]
+    #[command(about = "Display configuration")]
     Status,
 }
 
