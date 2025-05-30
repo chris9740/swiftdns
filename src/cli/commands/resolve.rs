@@ -47,7 +47,12 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
     let client = Client::connect(&config).await?;
 
     if let Some(entry) = filter::blacklist::find(&args.domain.name()) {
-        println!("{}", entry.format_log_message(&args.domain));
+        eprintln!(
+            "Query for {} refused (`{}`)",
+            args.domain.name(),
+            entry.pattern.yellow()
+        );
+
         return Ok(());
     }
 

@@ -51,8 +51,8 @@ async fn handle_message(
         ResponseCode::FormErr
     );
 
-    if let Some(filter) = filter::blacklist::find(&domain.name()) {
-        eprintln!("{}", filter.format_log_message(&domain));
+    if let Some(entry) = filter::blacklist::find(&domain.name()) {
+        eprintln!("Query for {} refused (`{}`)", domain.name(), entry.pattern);
         response.set_response_code(ResponseCode::Refused);
         return Ok(response);
     }
@@ -74,6 +74,8 @@ async fn handle_message(
 }
 
 pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
+    filter::initialize_filters()?;
+
     let client = Client::connect(config).await?;
     let mut cache = Cache::new();
 

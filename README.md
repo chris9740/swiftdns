@@ -65,6 +65,8 @@ For those seeking an extra layer of privacy, Swiftdns also offers the option to 
 
 Swiftdns will look for our blacklist rules inside `.list` files located in `/etc/swiftdns/filters/` and any of its immediate subdirectories, in case you want to organize your rules.
 
+**Important:** You need to restart the service after creating or modifying any of these files for the changes to take effect.
+
 ### Getting Started with Preset Filters
 
 If you want to get started quickly with some common blocking rules, you can copy the preset filters from the repository:
@@ -253,18 +255,6 @@ $ swiftdns resolve <domain> [type: A] [--tor]
 **Flags**:
 
 `--tor`: Boolean flag to route the query through the Tor network.
-
----
-
-### Filters
-
-List all the active filters that Swiftdns is currently using.
-
-```bash
-$ swiftdns filters
-```
-
-This will display a numbered list of all filters, showing their names and file paths.
 
 ---
 

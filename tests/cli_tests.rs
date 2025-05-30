@@ -16,28 +16,11 @@ fn test_demo_command() {
         .stdout(predicate::str::contains("example.com is not blacklisted"));
 
     let mut cmd = Command::cargo_bin("swiftdns").unwrap();
-    let assert = cmd.arg("demo").arg("tiktok.com").assert();
+    let assert = cmd.arg("demo").arg("google.com").assert();
 
-    assert
-        .success()
-        .stdout(predicate::str::contains(
-            "tiktok.com would be blacklisted by",
-        ))
-        .stdout(predicate::str::contains(
-            "filters/tiktok.list:1 (pattern `tiktok.com`)",
-        ));
-}
-
-#[test]
-fn test_filters_command() {
-    let mut cmd = Command::cargo_bin("swiftdns").unwrap();
-    let assert = cmd.arg("filters").assert();
-
-    assert
-        .success()
-        .stdout(predicate::str::contains("Filters"))
-        .stdout(predicate::str::contains("1) Google (google.list)"))
-        .stdout(predicate::str::ends_with("(whitelist.list)\n"));
+    assert.success().stdout(predicate::str::contains(
+        "google.com is blacklisted (pattern `^google.com`)",
+    ));
 }
 
 #[test]

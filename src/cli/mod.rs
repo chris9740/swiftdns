@@ -22,8 +22,6 @@ pub enum Commands {
     Start(commands::start::StartArgs),
     #[command(about = "Resolve a domain name")]
     Resolve(commands::resolve::ResolveArgs),
-    #[command(about = "List all filters", name = "filters")]
-    ListFilters,
 }
 
 pub async fn start() -> Result<()> {
@@ -34,6 +32,5 @@ pub async fn start() -> Result<()> {
         Commands::Demo(args) => commands::demo::execute(args).await,
         Commands::Start(args) => commands::start::execute(args, &config).await,
         Commands::Resolve(args) => commands::resolve::execute(args, &config).await,
-        Commands::ListFilters => commands::filters::execute().await,
     }
 }

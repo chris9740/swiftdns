@@ -1,18 +1,19 @@
 use anyhow::Result;
 use colored::Colorize;
 
+use crate::filter;
+
 pub use super::resolve::ResolveArgs as DemoArgs;
 
 pub async fn execute(args: DemoArgs) -> Result<()> {
+    filter::initialize_filters()?;
     let name = args.domain.name();
 
     if let Some(entry) = crate::filter::blacklist::find(&name) {
         println!(
-            "{} would be blacklisted by {}:{} (pattern `{}`)",
+            "{} is blacklisted (pattern `{}`)",
             name.red(),
-            entry.file,
-            entry.line,
-            entry.pattern
+            entry.pattern.yellow(),
         );
     } else {
         println!("{} is not blacklisted", name.green());
