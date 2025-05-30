@@ -79,6 +79,11 @@ validate_commit_message() {
     exit 1
 }
 
+if ! git diff --quiet; then
+    print_generic_error "There are unstaged changes. Please stage them before committing."
+    exit 1
+fi
+
 validate_commit_message
 
 if ! cargo clippy -- -D warnings; then
