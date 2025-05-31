@@ -8,9 +8,8 @@ use std::{
 use anyhow::{Context, Result};
 use wildmatch::WildMatch;
 
-#[derive(serde::Serialize, Debug)]
+#[derive(Debug)]
 pub struct Filter {
-    #[serde(skip_serializing)]
     pub contents: String,
     pub filename: String,
 }

@@ -1,4 +1,3 @@
-use serde::Deserialize;
 use std::{fmt::Display, str::FromStr};
 
 #[derive(Debug, Clone)]
@@ -34,16 +33,6 @@ impl Display for DnsName {
             DnsName::Authority(a) => write!(f, "{}", a),
             DnsName::Root => write!(f, "."),
         }
-    }
-}
-
-impl<'de> Deserialize<'de> for DnsName {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        DnsName::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -213,16 +202,6 @@ impl FromStr for Domain {
         }
 
         Ok(Domain(ascii_domain))
-    }
-}
-
-impl<'de> Deserialize<'de> for Domain {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        Domain::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
