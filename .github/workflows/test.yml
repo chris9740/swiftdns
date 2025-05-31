@@ -18,6 +18,9 @@ jobs:
               uses: actions-rs/toolchain@v1
               with:
                   toolchain: stable
+                  profile: minimal
+                  override: true
+                  components: clippy, rustfmt
 
             - name: Install ShellCheck
               run: |
@@ -28,7 +31,16 @@ jobs:
               run: |
                   shellcheck .github/hooks/prepare-commit-msg
 
-            - name: Build and test
+            - name: Install dependencies
               run: |
-                  cargo build --verbose
-                  cargo test --verbose
+                  sudo apt-get update
+                  sudo apt-get install -y clang mold
+
+            - name: Prepare cargo config
+              run: |
+                  # Remove sccache config for CI
+                  sed -i '/\[build\]/,+1d' .cargo/config.toml
+
+            - name: Run tests
+              run: |
+                  cargo test
