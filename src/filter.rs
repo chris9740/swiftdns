@@ -41,10 +41,10 @@ struct FilterData {
 impl FilterData {
     /// Finds a matching filter pattern for the given domain name.
     ///
-    /// This method checks:
+    /// This method checks, in order of priority:
     /// 1. Exact matches (fastest)
-    /// 2. Domain and subdomain matches (e.g., "google.com" matches "maps.google.com")
-    /// 3. Wildcard patterns (slowest, but should be minimal)
+    /// 2. Domain and subdomain matches (e.g., pattern "google.com" matches "maps.google.com")
+    /// 3. Wildcard patterns (slowest)
     fn find_match(&self, name: &str) -> Option<String> {
         if self.exact_matches.contains(name) {
             return Some(format!("^{}", name));
