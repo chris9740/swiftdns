@@ -3,8 +3,8 @@
 address = "127.0.0.1:5053"
 
 [resolver]
-url = "https://dns.nextdns.io/dns-query"
-bootstrap_ips = ["45.90.28.0:443", "45.90.30.0:443"]
+url = "https://cloudflare-dns.com/dns-query"
+bootstrap_ips = ["1.1.1.1:443"]
 
 [tor]
 enabled = false

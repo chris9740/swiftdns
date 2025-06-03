@@ -6,6 +6,7 @@ use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 
 use crate::config::SwiftConfig;
 
+#[derive(Clone, Debug)]
 pub struct Client {
     client: reqwest::Client,
 }

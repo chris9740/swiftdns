@@ -4,7 +4,7 @@ use swiftdns::cli;
 #[cfg(feature = "tracing")]
 use tracing::level_filters::LevelFilter;
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 async fn main() -> Result<()> {
     #[cfg(feature = "tracing")]
     tracing_subscriber::fmt()
