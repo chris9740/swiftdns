@@ -32,45 +32,54 @@ async fn handle_message(
     config: &SwiftConfig,
     cache: &mut Cache,
 ) -> Result<Message, DnsError> {
-    let mut response = create_response_base(message);
-
     // RFC 1035 allows multiple queries per message for forward compatibility.
     // This feature is not implemented or used in practice
     // and poses security risks (DNS amplification).
     // This implementation supports only single-query messages.
     if message.queries().len() != 1 {
+        let mut response = create_response_base(message);
         response.set_response_code(ResponseCode::FormErr);
         return Ok(response);
     }
 
     let query = message.queries().first().unwrap();
-
-    let domain: DnsName = ok_or_rcode!(
-        query.name().to_string().parse(),
-        mut response,
-        ResponseCode::FormErr
-    );
+    let domain: DnsName = match query.name().to_string().parse() {
+        Ok(domain) => domain,
+        Err(_) => {
+            let mut response = create_response_base(message);
+            response.set_response_code(ResponseCode::FormErr);
+            return Ok(response);
+        }
+    };
 
     if let Some(entry) = filter::blacklist::find(&domain.name()) {
         eprintln!("Query for {} refused (`{}`)", domain.name(), entry.pattern);
+        let mut response = create_response_base(message);
         response.set_response_code(ResponseCode::Refused);
         return Ok(response);
     }
 
-    if let Some(cached_response) = cache.get(query.name(), query.query_type()) {
-        response.set_response_code(cached_response.response_code());
+    let mut cached = false;
 
-        response.insert_answers(cached_response.answers().to_vec());
-        response.insert_name_servers(cached_response.name_servers().to_vec());
-        response.insert_additionals(cached_response.additionals().to_vec());
-        return Ok(response);
+    let upstream_response = match cache.get(query.name(), query.query_type()) {
+        Some(cached_response) => {
+            cached = true;
+            cached_response
+        }
+        None => upstream::resolve(client, config, message).await?,
+    };
+
+    if !cached {
+        cache.insert(query.name(), query.query_type(), &upstream_response);
     }
 
-    let resolved_response = upstream::resolve(client, config, message).await?;
+    let mut response = create_response_base(message);
+    response.set_response_code(upstream_response.response_code());
+    response.add_answers(upstream_response.answers().to_vec());
+    response.add_name_servers(upstream_response.name_servers().to_vec());
+    response.add_additionals(upstream_response.additionals().to_vec());
 
-    cache.insert(query.name(), query.query_type(), &resolved_response);
-
-    Ok(resolved_response)
+    Ok(response)
 }
 
 pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
@@ -115,15 +124,16 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
 
                     error_response.set_response_code(why.response_code());
 
-                    error_response.insert_answers(vec![]);
-                    error_response.insert_name_servers(vec![]);
-                    error_response.insert_additionals(vec![]);
-
                     socket.send_to(&error_response.to_bytes()?, src)?;
                 }
             }
         } else {
             eprintln!("Failed to parse DNS message from {src}");
+            let mut error_response = create_response_base(&Message::new());
+            error_response.set_response_code(ResponseCode::FormErr);
+            if let Err(e) = socket.send_to(&error_response.to_bytes()?, src) {
+                eprintln!("Failed to send error response to {src}: {}", e);
+            }
         }
     }
 }
