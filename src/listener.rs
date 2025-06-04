@@ -1,6 +1,6 @@
 use std::{
     io::ErrorKind,
-    net::{SocketAddr, UdpSocket},
+    net::{IpAddr, SocketAddr, UdpSocket},
 };
 
 use anyhow::Result;
@@ -107,7 +107,7 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
         let mut buf = [0; 512];
         let (amt, src) = socket.recv_from(&mut buf)?;
 
-        if !src.ip().is_loopback() {
+        if !is_local_ip(&src.ip()) {
             eprintln!("Received non-local request from {src}");
             continue;
         }
@@ -119,21 +119,20 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
                 }
                 Err(why) => {
                     eprintln!("Error resolving query: {}", why);
-
                     let mut error_response = create_response_base(&message);
-
                     error_response.set_response_code(why.response_code());
-
                     socket.send_to(&error_response.to_bytes()?, src)?;
                 }
             }
         } else {
-            eprintln!("Failed to parse DNS message from {src}");
-            let mut error_response = create_response_base(&Message::new());
-            error_response.set_response_code(ResponseCode::FormErr);
-            if let Err(e) = socket.send_to(&error_response.to_bytes()?, src) {
-                eprintln!("Failed to send error response to {src}: {}", e);
-            }
+            eprintln!("Received invalid DNS message from {src}");
         }
+    }
+}
+
+fn is_local_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => v4.is_loopback() || v4.is_private(),
+        IpAddr::V6(v6) => v6.is_loopback(),
     }
 }
