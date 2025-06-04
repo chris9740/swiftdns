@@ -5,6 +5,7 @@ authors = ["chris9740"]
 edition = "2021"
 description = "Local DNS resolver with DoH, Tor routing, and privacy filtering"
 license-file = "LICENSE"
+build = "build.rs"
 
 [profile.dev]
 lto = false

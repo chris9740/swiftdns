@@ -1,4 +1,5 @@
 use anyhow::Result;
+use clap::crate_version;
 use colored::*;
 use std::io::Write;
 use tabwriter::TabWriter;
@@ -6,7 +7,13 @@ use tabwriter::TabWriter;
 use crate::config::SwiftConfig;
 
 pub async fn execute(config: &SwiftConfig) -> Result<()> {
-    println!("{}", "SwiftDNS Status".bold().underline());
+    println!("{}", "Swiftdns Status".bold());
+    println!(
+        " {}: {} ({})",
+        "Version".cyan(),
+        crate_version!(),
+        env!("GIT_COMMIT_HASH")
+    );
     println!();
 
     let mut tw = TabWriter::new(vec![]);
