@@ -12,7 +12,13 @@ use std::{
 use std::{str::FromStr, time::Instant};
 use tabwriter::TabWriter;
 
-use crate::{config::SwiftConfig, domain::DnsName, filter, http::Client, upstream};
+use crate::{
+    config::SwiftConfig,
+    domain::DnsName,
+    filter::{DnsFilter, FilterResult},
+    http::Client,
+    upstream,
+};
 
 #[derive(Args)]
 pub struct ResolveArgs {
@@ -44,17 +50,23 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
         config.tor.enabled = true;
     }
 
-    let client = Client::connect(&config).await?;
+    let filter = if std::env::var("SWIFTDNS_CLI_TEST_MODE").is_ok() {
+        DnsFilter::from_mock_data()
+    } else {
+        DnsFilter::from_default_path()?
+    };
 
-    if let Some(entry) = filter::blacklist::find(&args.domain.name()) {
+    if let FilterResult::Block(entry) = filter.check_domain(&args.domain.name()) {
         eprintln!(
-            "Query for {} refused (`{}`)",
+            "Query for {} refused (pattern `{}`, path `{}`)",
             args.domain.name(),
-            entry.pattern.yellow()
+            entry.original_pattern().yellow(),
+            entry.path().green()
         );
-
         return Ok(());
     }
+
+    let client = Client::connect(&config).await?;
 
     let query_start_time = Instant::now();
 

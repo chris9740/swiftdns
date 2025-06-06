@@ -16,10 +16,10 @@ fn test_demo_command() {
         .stdout(predicate::str::contains("example.com is not blacklisted"));
 
     let mut cmd = Command::cargo_bin("swiftdns").unwrap();
-    let assert = cmd.arg("demo").arg("google.com").assert();
+    let assert = cmd.arg("demo").arg("facebook.com").assert();
 
     assert.success().stdout(predicate::str::contains(
-        "google.com is blacklisted (pattern `^google.com`)",
+        "facebook.com is blacklisted (matched with `^facebook.com`, found in `social-media.list:1`)",
     ));
 }
 

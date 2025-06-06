@@ -133,6 +133,10 @@ pub fn get_config_path() -> PathBuf {
     }
 }
 
+pub fn get_filters_path() -> PathBuf {
+    get_config_path().join("filters")
+}
+
 pub fn create_default_config(path: &Path) -> Result<(), ConfigError> {
     let config = SwiftConfig::default();
     let toml_string = toml::to_string_pretty(&config)

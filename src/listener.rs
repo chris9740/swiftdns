@@ -10,7 +10,12 @@ use hickory_proto::{
 };
 
 use crate::{
-    cache::Cache, config::SwiftConfig, domain::DnsName, error::DnsError, filter, http::Client,
+    cache::Cache,
+    config::SwiftConfig,
+    domain::DnsName,
+    error::DnsError,
+    filter::{DnsFilter, FilterResult},
+    http::Client,
     upstream,
 };
 
@@ -30,6 +35,7 @@ async fn handle_message(
     message: &Message,
     client: &Client,
     config: &SwiftConfig,
+    filter: &DnsFilter,
     cache: &mut Cache,
 ) -> Result<Message, DnsError> {
     // RFC 1035 allows multiple queries per message for forward compatibility.
@@ -52,8 +58,13 @@ async fn handle_message(
         }
     };
 
-    if let Some(entry) = filter::blacklist::find(&domain.name()) {
-        eprintln!("Query for {} refused (`{}`)", domain.name(), entry.pattern);
+    if let FilterResult::Block(rule) = filter.check_domain(&domain.name()) {
+        eprintln!(
+            "Query for {} refused (pattern `{}`, path `{}`)",
+            domain.name(),
+            rule.original_pattern(),
+            rule.path()
+        );
         let mut response = create_response_base(message);
         response.set_response_code(ResponseCode::Refused);
         return Ok(response);
@@ -83,8 +94,7 @@ async fn handle_message(
 }
 
 pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
-    filter::initialize_filters()?;
-
+    let filter = DnsFilter::from_default_path()?;
     let client = Client::connect(config).await?;
     let mut cache = Cache::new();
 
@@ -113,7 +123,7 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
         }
 
         if let Ok(message) = Message::from_bytes(&buf[..amt]) {
-            match handle_message(&message, &client, config, &mut cache).await {
+            match handle_message(&message, &client, config, &filter, &mut cache).await {
                 Ok(response) => {
                     socket.send_to(&response.to_bytes()?, src)?;
                 }

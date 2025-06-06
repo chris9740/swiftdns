@@ -1,432 +1,411 @@
-use std::{
-    collections::HashSet,
-    fs,
-    path::{Path, PathBuf},
-    sync::OnceLock,
-};
+use std::{fs, path::Path};
 
-use anyhow::{Context, Result};
 use wildmatch::WildMatch;
 
-#[derive(Debug)]
-pub struct Filter {
-    pub contents: String,
-    pub filename: String,
+use crate::config;
+
+#[derive(Debug, thiserror::Error)]
+#[error("Filter error: {0}")]
+pub enum FilterError {
+    IoError(String),
 }
 
-pub struct FilterEntry {
-    pub pattern: String,
-}
-
-pub enum FilterType {
-    Whitelist,
-    Blacklist,
-}
-
-#[derive(Debug, Clone)]
-struct FilterPattern {
-    pattern: String,
+impl From<std::io::Error> for FilterError {
+    fn from(err: std::io::Error) -> Self {
+        FilterError::IoError(err.to_string())
+    }
 }
 
 #[derive(Debug, Default)]
-struct FilterData {
-    /// Exact matches (^domain.com patterns)
-    exact_matches: HashSet<String>,
-    /// Domain and subdomain matches (domain.com patterns)
-    domain_matches: HashSet<String>,
-    /// Complex wildcard patterns that need WildMatch
+pub struct DnsFilter {
+    filters: Vec<FilterData>,
+    whitelist: Vec<FilterPattern>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct FilterData {
+    exact_matches: Vec<FilterPattern>,
+    domain_matches: Vec<FilterPattern>,
     wildcard_patterns: Vec<FilterPattern>,
 }
 
 impl FilterData {
-    /// Finds a matching filter pattern for the given domain name.
-    ///
-    /// This method checks, in order of priority:
-    /// 1. Exact matches (fastest)
-    /// 2. Domain and subdomain matches (e.g., pattern "google.com" matches "maps.google.com")
-    /// 3. Wildcard patterns (slowest)
-    fn find_match(&self, name: &str) -> Option<String> {
-        if self.exact_matches.contains(name) {
-            return Some(format!("^{}", name));
+    pub fn add_pattern(&mut self, pattern: FilterPattern) {
+        match &pattern {
+            FilterPattern::Exact { .. } => self.exact_matches.push(pattern),
+            FilterPattern::Domain { .. } => self.domain_matches.push(pattern),
+            FilterPattern::Wildcard { .. } => self.wildcard_patterns.push(pattern),
         }
-
-        let parts: Vec<&str> = name.split('.').collect();
-        for i in 0..parts.len() {
-            let domain_suffix = parts[i..].join(".");
-            if self.domain_matches.contains(&domain_suffix) {
-                return Some(domain_suffix);
-            }
-        }
-
-        for pattern in &self.wildcard_patterns {
-            if WildMatch::new(&pattern.pattern).matches(name) {
-                return Some(pattern.pattern.clone());
-            }
-        }
-
-        None
     }
 }
 
-static WHITELIST_CACHE: OnceLock<FilterData> = OnceLock::new();
-static BLACKLIST_CACHE: OnceLock<FilterData> = OnceLock::new();
-
-/// Initialize the filter caches. Should be called once at startup.
-pub fn initialize_filters() -> Result<()> {
-    if WHITELIST_CACHE.get().is_some() && BLACKLIST_CACHE.get().is_some() {
-        return Ok(());
+impl DnsFilter {
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    if std::env::var("SWIFTDNS_CLI_TEST_MODE").is_ok() {
-        let (blacklist_data, whitelist_data) = generate_test_filters();
-        let _ = BLACKLIST_CACHE.set(blacklist_data);
-        let _ = WHITELIST_CACHE.set(whitelist_data);
-
-        return Ok(());
+    pub fn from_default_path() -> Result<Self, FilterError> {
+        Self::from_path(config::get_filters_path())
     }
 
-    let filters = load_filters()?;
-
-    let mut whitelist_data = FilterData::default();
-    let mut blacklist_data = FilterData::default();
-
-    for filter in filters {
-        let is_whitelist = filter.filename == "whitelist.list";
-        let target_data = if is_whitelist {
-            &mut whitelist_data
-        } else {
-            &mut blacklist_data
-        };
-
-        parse_filter_into_data(&filter, target_data)?;
+    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, FilterError> {
+        let mut filter = Self::new();
+        filter.load_filters(path)?;
+        Ok(filter)
     }
 
-    WHITELIST_CACHE
-        .set(whitelist_data)
-        .map_err(|_| anyhow::anyhow!("Failed to initialize whitelist cache"))?;
+    fn load_filters<P>(&mut self, path: P) -> Result<(), FilterError>
+    where
+        P: AsRef<Path>,
+    {
+        let file_data = self.read_filter_files(path)?;
+        self.load_filter_data(file_data)
+    }
 
-    BLACKLIST_CACHE
-        .set(blacklist_data)
-        .map_err(|_| anyhow::anyhow!("Failed to initialize blacklist cache"))?;
-
-    Ok(())
-}
-
-fn parse_filter_into_data(filter: &Filter, data: &mut FilterData) -> Result<()> {
-    for line in filter.contents.lines() {
-        let pattern = line.trim();
-
-        if pattern.starts_with('#') || pattern.is_empty() {
-            continue;
+    fn read_filter_files<P>(&self, path: P) -> Result<Vec<(String, String)>, FilterError>
+    where
+        P: AsRef<Path>,
+    {
+        let path = path.as_ref();
+        if !path.exists() {
+            return Err(FilterError::IoError(format!(
+                "Filter path does not exist: {}",
+                path.display()
+            )));
         }
 
-        if let Some(exact_domain) = pattern.strip_prefix('^') {
-            data.exact_matches.insert(exact_domain.to_string());
-        } else if pattern.contains('*') {
-            data.wildcard_patterns.push(FilterPattern {
-                pattern: pattern.to_string(),
-            });
-        } else {
-            data.domain_matches.insert(pattern.to_string());
+        let mut file_data = Vec::new();
+
+        let entries: Vec<std::fs::DirEntry> = path
+            .read_dir()?
+            .filter_map(Result::ok)
+            .filter_map(|entry| {
+                entry
+                    .file_type()
+                    .ok()
+                    .filter(|ft| ft.is_file())
+                    .map(|_| entry)
+            })
+            .filter(|file| {
+                file.file_name()
+                    .to_ascii_lowercase()
+                    .to_string_lossy()
+                    .ends_with(".list")
+            })
+            .collect();
+
+        for entry in entries {
+            let filename = entry.file_name().to_string_lossy().to_string();
+            let contents = fs::read_to_string(entry.path())?;
+            file_data.push((filename, contents));
         }
+
+        Ok(file_data)
     }
 
-    Ok(())
-}
-
-pub fn load_filters() -> Result<Vec<Filter>> {
-    use crate::config;
-
-    let base_directory_path = config::get_config_path().join("filters");
-    let mut filters = Vec::new();
-
-    let mut file_paths = Vec::new();
-    visit_dirs(&base_directory_path, &mut file_paths)?;
-
-    for path in file_paths {
-        let contents = fs::read_to_string(&path).context("Failed to read filter contents")?;
-        let filename = path
-            .file_name()
-            .context("Failed to get filename")?
-            .to_string_lossy()
-            .to_string();
-
-        filters.push(Filter { filename, contents });
-    }
-
-    Ok(filters)
-}
-
-fn visit_dirs(dir: &Path, file_paths: &mut Vec<PathBuf>) -> Result<()> {
-    if dir.is_dir() {
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
-
-            if path.is_dir() {
-                visit_dirs(&path, file_paths)?;
+    fn load_filter_data(&mut self, files: Vec<(String, String)>) -> Result<(), FilterError> {
+        for (filename, contents) in files {
+            let is_whitelist = filename == "whitelist.list";
+            let mut line_number = 0;
+            let mut blacklist_data = if is_whitelist {
+                None
             } else {
-                let pathname = path.to_string_lossy();
+                Some(FilterData::default())
+            };
 
-                if pathname.ends_with(".list") {
-                    file_paths.push(path);
+            for pattern in contents.lines().map(|line| line.trim()) {
+                line_number += 1;
+
+                if pattern.is_empty() || pattern.starts_with('#') {
+                    continue;
+                }
+
+                let filter_pattern = Self::parse_pattern(pattern, &filename, line_number);
+
+                if is_whitelist {
+                    self.whitelist.push(filter_pattern);
+                } else {
+                    blacklist_data.as_mut().unwrap().add_pattern(filter_pattern);
+                }
+            }
+
+            if let Some(data) = blacklist_data {
+                self.filters.push(data);
+            }
+        }
+        Ok(())
+    }
+
+    pub fn check_domain(&self, domain: &str) -> FilterResult {
+        if let Some(pattern) = self.whitelist.iter().find(|rule| rule.matches(domain)) {
+            return FilterResult::Whitelisted(pattern.clone());
+        }
+
+        for filter in &self.filters {
+            let mut patterns = Vec::new();
+
+            patterns.extend(&filter.exact_matches);
+            patterns.extend(&filter.domain_matches);
+            patterns.extend(&filter.wildcard_patterns);
+
+            for pattern in patterns {
+                if pattern.matches(domain) {
+                    return FilterResult::Block(pattern.clone());
                 }
             }
         }
+
+        FilterResult::Allow
     }
-    Ok(())
-}
 
-pub mod whitelist {
-    use super::{FilterEntry, WHITELIST_CACHE};
-
-    pub fn find(name: &str) -> Option<FilterEntry> {
-        let cache = WHITELIST_CACHE.get()?;
-        let pattern = cache.find_match(name)?;
-
-        Some(FilterEntry { pattern })
-    }
-}
-
-pub mod blacklist {
-    use super::{FilterEntry, BLACKLIST_CACHE};
-
-    pub fn find(name: &str) -> Option<FilterEntry> {
-        if super::whitelist::find(name).is_some() {
-            return None;
+    fn parse_pattern(pattern: &str, filename: &str, line_number: usize) -> FilterPattern {
+        if let Some(exact_domain) = pattern.strip_prefix('^') {
+            FilterPattern::Exact {
+                pattern: pattern.to_string(),
+                filename: filename.to_string(),
+                line_number,
+                exact_domain: exact_domain.to_string(),
+            }
+        } else if pattern.contains('*') {
+            FilterPattern::Wildcard {
+                pattern: pattern.to_string(),
+                filename: filename.to_string(),
+                line_number,
+            }
+        } else {
+            FilterPattern::Domain {
+                pattern: pattern.to_string(),
+                filename: filename.to_string(),
+                line_number,
+            }
         }
+    }
 
-        let cache = BLACKLIST_CACHE.get()?;
-        let pattern = cache.find_match(name)?;
+    pub fn from_mock_data() -> Self {
+        let mut filter = Self::default();
 
-        Some(FilterEntry { pattern })
+        let mock_files = vec![
+            (
+                "social-media.list".to_string(),
+                concat!(
+                    "^facebook.com\n",
+                    "^www.facebook.com\n",
+                    "instagram.com\n",
+                    "tiktok.com\n",
+                    "snapchat.com\n",
+                    "*tiktok*"
+                )
+                .to_string(),
+            ),
+            (
+                "advertising.list".to_string(),
+                concat!(
+                    "doubleclick.net\n",
+                    "googleadservices.com\n",
+                    "*analytics*\n",
+                    "*ads*\n",
+                    "^googleads.com"
+                )
+                .to_string(),
+            ),
+            (
+                "whitelist.list".to_string(),
+                concat!(
+                    "# Exact domain exceptions\n",
+                    "^packages.microsoft.com\n",
+                    "^vscode.microsoft.com\n",
+                    "^analytics.example.com\n",
+                    "^business.facebook.com\n",
+                    "\n",
+                    "# Domain and subdomain exceptions\n",
+                    "github.com\n",
+                    "stackoverflow.com\n",
+                    "developer.mozilla.org\n",
+                    "\n",
+                    "# Wildcard exceptions\n",
+                    "*essential*\n",
+                    "api.*.com\n",
+                    "cdn-*.amazonaws.com\n",
+                    "*-docs.github.io"
+                )
+                .to_string(),
+            ),
+        ];
+
+        filter.load_filter_data(mock_files).unwrap();
+        filter
     }
 }
 
-fn generate_test_filters() -> (FilterData, FilterData) {
-    let mut blacklist_data = FilterData::default();
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum FilterPattern {
+    Exact {
+        pattern: String,
+        filename: String,
+        line_number: usize,
+        exact_domain: String,
+    },
+    Domain {
+        pattern: String,
+        filename: String,
+        line_number: usize,
+    },
+    Wildcard {
+        pattern: String,
+        filename: String,
+        line_number: usize,
+    },
+}
 
-    // Exact matches (^domain.com patterns)
-    blacklist_data.exact_matches.extend([
-        "google.com".to_string(),
-        "www.google.com".to_string(),
-        "facebook.com".to_string(),
-        "www.facebook.com".to_string(),
-        "tiktok.com".to_string(),
-    ]);
+impl FilterPattern {
+    fn matches(&self, domain: &str) -> bool {
+        match self {
+            FilterPattern::Exact { exact_domain, .. } => exact_domain == domain,
+            FilterPattern::Domain { pattern, .. } => {
+                let parts: Vec<&str> = domain.split('.').collect();
+                for i in 0..parts.len() {
+                    let domain_suffix = parts[i..].join(".");
+                    if pattern == &domain_suffix {
+                        return true;
+                    }
+                }
+                false
+            }
+            FilterPattern::Wildcard { pattern, .. } => WildMatch::new(pattern).matches(domain),
+        }
+    }
 
-    // Domain matches (blocks domain and all subdomains)
-    blacklist_data.domain_matches.extend([
-        "doubleclick.net".to_string(),
-        "googleadservices.com".to_string(),
-        "meta.com".to_string(),
-        "instagram.com".to_string(),
-        "bytedance.com".to_string(),
-    ]);
+    pub fn original_pattern(&self) -> &str {
+        match self {
+            FilterPattern::Exact { pattern, .. } => pattern,
+            FilterPattern::Domain { pattern, .. } => pattern,
+            FilterPattern::Wildcard { pattern, .. } => pattern,
+        }
+    }
 
-    // Wildcard patterns
-    blacklist_data.wildcard_patterns.extend([
-        FilterPattern {
-            pattern: "*analytics*".to_string(),
-        },
-        FilterPattern {
-            pattern: "*.zip".to_string(),
-        },
-        FilterPattern {
-            pattern: "*.mov".to_string(),
-        },
-        FilterPattern {
-            pattern: "tiktok*.com*".to_string(),
-        },
-        FilterPattern {
-            pattern: "*s.google.com".to_string(),
-        },
-        FilterPattern {
-            pattern: "*ads*".to_string(),
-        },
-    ]);
+    pub fn path(&self) -> String {
+        match self {
+            FilterPattern::Exact {
+                filename,
+                line_number,
+                ..
+            } => format!("{}:{}", filename, line_number),
+            FilterPattern::Domain {
+                filename,
+                line_number,
+                ..
+            } => format!("{}:{}", filename, line_number),
+            FilterPattern::Wildcard {
+                filename,
+                line_number,
+                ..
+            } => format!("{}:{}", filename, line_number),
+        }
+    }
+}
 
-    let mut whitelist_data = FilterData::default();
-
-    // Whitelist some Google services that should be accessible
-    whitelist_data.exact_matches.extend([
-        "maps.google.com".to_string(),
-        "translate.google.com".to_string(),
-    ]);
-
-    // Allow specific Discord CDN that might be caught by broader blocks
-    whitelist_data
-        .domain_matches
-        .extend(["discord-attachments-uploads-prd.storage.googleapis.com".to_string()]);
-
-    (blacklist_data, whitelist_data)
+#[derive(Debug, Clone, PartialEq)]
+pub enum FilterResult {
+    Allow,
+    Whitelisted(FilterPattern),
+    Block(FilterPattern),
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{blacklist, whitelist};
+    use crate::filter::{DnsFilter, FilterPattern, FilterResult};
 
-    fn setup_test_mode() {
-        std::env::set_var("SWIFTDNS_CLI_TEST_MODE", "1");
-        super::initialize_filters().expect("Failed to initialize filters");
+    #[test]
+    fn test_filter_loading() {
+        let filter = DnsFilter::from_mock_data();
+        assert_eq!(filter.filters.len(), 2);
     }
 
     #[test]
-    fn test_exact_blacklist_matches() {
-        setup_test_mode();
+    fn test_blacklisted_gets_blocked() {
+        let filter = DnsFilter::from_mock_data();
 
-        // Test exact matches (^domain.com patterns)
-        assert!(blacklist::find("google.com").is_some());
-        assert!(blacklist::find("www.google.com").is_some());
-        assert!(blacklist::find("facebook.com").is_some());
-        assert!(blacklist::find("www.facebook.com").is_some());
-        assert!(blacklist::find("tiktok.com").is_some());
-
-        // These should NOT match exact patterns
-        assert!(blacklist::find("maps.google.com").is_none()); // Whitelisted
-        assert!(blacklist::find("subdomain.google.com").is_none()); // Only exact google.com is blocked
-    }
-
-    #[test]
-    fn test_domain_and_subdomain_blacklist_matches() {
-        setup_test_mode();
-
-        // Test domain matches (blocks domain and all subdomains)
-        assert!(blacklist::find("doubleclick.net").is_some());
-        assert!(blacklist::find("ads.doubleclick.net").is_some());
-        assert!(blacklist::find("stats.doubleclick.net").is_some());
-
-        assert!(blacklist::find("googleadservices.com").is_some());
-        assert!(blacklist::find("pagead.googleadservices.com").is_some());
-
-        assert!(blacklist::find("meta.com").is_some());
-        assert!(blacklist::find("about.meta.com").is_some());
-
-        assert!(blacklist::find("instagram.com").is_some());
-        assert!(blacklist::find("www.instagram.com").is_some());
-
-        assert!(blacklist::find("bytedance.com").is_some());
-        assert!(blacklist::find("www.bytedance.com").is_some());
-    }
-
-    #[test]
-    fn test_wildcard_blacklist_patterns() {
-        setup_test_mode();
-
-        // Test *analytics* pattern
-        assert!(blacklist::find("google-analytics.com").is_some());
-        assert!(blacklist::find("analytics.google.com").is_some());
-        assert!(blacklist::find("someanalytics.example.com").is_some());
-        assert!(blacklist::find("example-analytics-service.net").is_some());
-
-        // Test *.zip and *.mov patterns
-        assert!(blacklist::find("example.zip").is_some());
-        assert!(blacklist::find("malware.zip").is_some());
-        assert!(blacklist::find("video.mov").is_some());
-        assert!(blacklist::find("suspicious.mov").is_some());
-
-        // Test tiktok*.com* pattern
-        assert!(blacklist::find("tiktokv.com").is_some());
-        assert!(blacklist::find("tiktokcdn.com").is_some());
-        assert!(blacklist::find("tiktok-analytics.com.evil").is_some());
-
-        // Test *s.google.com pattern
-        assert!(blacklist::find("books.google.com").is_some());
-        assert!(blacklist::find("services.google.com").is_some());
-
-        // Test *ads* pattern
-        assert!(blacklist::find("googleads.com").is_some());
-        assert!(blacklist::find("ads.yahoo.com").is_some());
-        assert!(blacklist::find("adservice.google.com").is_some());
-    }
-
-    #[test]
-    fn test_whitelist_functionality() {
-        setup_test_mode();
-
-        // Test whitelisted domains that would otherwise be blocked
-        assert!(whitelist::find("maps.google.com").is_some());
-        assert!(whitelist::find("translate.google.com").is_some());
-        assert!(
-            whitelist::find("discord-attachments-uploads-prd.storage.googleapis.com").is_some()
+        assert_eq!(
+            filter.check_domain("facebook.com"),
+            FilterResult::Block(FilterPattern::Exact {
+                pattern: "^facebook.com".to_string(),
+                filename: "social-media.list".to_string(),
+                line_number: 1,
+                exact_domain: "facebook.com".to_string()
+            })
         );
-
-        // Test that whitelisted domains are NOT blocked
-        assert!(blacklist::find("maps.google.com").is_none());
-        assert!(blacklist::find("translate.google.com").is_none());
-        assert!(
-            blacklist::find("discord-attachments-uploads-prd.storage.googleapis.com").is_none()
+        assert_eq!(
+            filter.check_domain("www.facebook.com"),
+            FilterResult::Block(FilterPattern::Exact {
+                pattern: "^www.facebook.com".to_string(),
+                filename: "social-media.list".to_string(),
+                line_number: 2,
+                exact_domain: "www.facebook.com".to_string()
+            })
         );
-
-        // Test that subdomains of whitelisted domains also work
-        assert!(
-            blacklist::find("cdn.discord-attachments-uploads-prd.storage.googleapis.com").is_none()
+        assert_eq!(
+            filter.check_domain("instagram.com"),
+            FilterResult::Block(FilterPattern::Domain {
+                pattern: "instagram.com".to_string(),
+                filename: "social-media.list".to_string(),
+                line_number: 3
+            })
+        );
+        assert_eq!(
+            filter.check_domain("tiktokvideo.com"),
+            FilterResult::Block(FilterPattern::Wildcard {
+                pattern: "*tiktok*".to_string(),
+                filename: "social-media.list".to_string(),
+                line_number: 6
+            })
         );
     }
 
     #[test]
-    fn test_allowed_domains() {
-        setup_test_mode();
+    fn test_whitelisted_is_allowed() {
+        let filter = DnsFilter::from_mock_data();
 
-        // Test domains that should never be blocked
-        assert!(blacklist::find("duckduckgo.com").is_none());
-        assert!(blacklist::find("signal.org").is_none());
-        assert!(blacklist::find("tutanota.com").is_none());
-        assert!(blacklist::find("protonmail.com").is_none());
-        assert!(blacklist::find("github.com").is_none());
-        assert!(blacklist::find("stackoverflow.com").is_none());
+        assert_eq!(
+            filter.check_domain("packages.microsoft.com"),
+            FilterResult::Whitelisted(FilterPattern::Exact {
+                pattern: "^packages.microsoft.com".to_string(),
+                filename: "whitelist.list".to_string(),
+                line_number: 2,
+                exact_domain: "packages.microsoft.com".to_string()
+            })
+        );
+        assert_eq!(
+            filter.check_domain("vscode.microsoft.com"),
+            FilterResult::Whitelisted(FilterPattern::Exact {
+                pattern: "^vscode.microsoft.com".to_string(),
+                filename: "whitelist.list".to_string(),
+                line_number: 3,
+                exact_domain: "vscode.microsoft.com".to_string()
+            })
+        );
+        assert_eq!(
+            filter.check_domain("github.com"),
+            FilterResult::Whitelisted(FilterPattern::Domain {
+                pattern: "github.com".to_string(),
+                filename: "whitelist.list".to_string(),
+                line_number: 8
+            })
+        );
+        assert_eq!(
+            filter.check_domain("api.example.com"),
+            FilterResult::Whitelisted(FilterPattern::Wildcard {
+                pattern: "api.*.com".to_string(),
+                filename: "whitelist.list".to_string(),
+                line_number: 14
+            })
+        );
     }
 
     #[test]
-    fn test_complex_subdomain_scenarios() {
-        setup_test_mode();
+    fn test_non_blacklisted_is_allowed() {
+        let filter = DnsFilter::from_default_path().expect("Failed to read filters");
 
-        // Test that deep subdomains work correctly
-        assert!(blacklist::find("level1.level2.doubleclick.net").is_some());
-        assert!(blacklist::find("very.deep.subdomain.meta.com").is_some());
-
-        // Test that patterns don't over-match
-        assert!(blacklist::find("notgoogle.com").is_none());
-        assert!(blacklist::find("google-com.example.org").is_none());
-    }
-
-    #[test]
-    fn test_edge_cases() {
-        setup_test_mode();
-
-        // Test empty and invalid domains
-        assert!(blacklist::find("").is_none());
-        assert!(blacklist::find(".").is_none());
-        assert!(blacklist::find("..").is_none());
-
-        // Test domains that partially match patterns but shouldn't be blocked
-        assert!(blacklist::find("analyticsnot.com").is_some()); // Should match *analytics*
-        assert!(blacklist::find("zipfile.com").is_none()); // Should NOT match *.zip
-        assert!(blacklist::find("tiktok-fake.net").is_none()); // Should NOT match tiktok*.com*
-    }
-
-    #[test]
-    fn test_case_sensitivity() {
-        setup_test_mode();
-
-        // DNS domains should be case-insensitive, but our current implementation
-        // is case-sensitive. These tests document the current behavior.
-        assert!(blacklist::find("GOOGLE.COM").is_none()); // Currently case-sensitive
-        assert!(blacklist::find("Google.com").is_none()); // Currently case-sensitive
-        assert!(blacklist::find("google.com").is_some()); // Exact match
-    }
-
-    #[test]
-    fn test_whitelist_priority() {
-        setup_test_mode();
-
-        // Ensure whitelist takes priority over blacklist
-        // maps.google.com would match *s.google.com wildcard but is whitelisted
-        assert!(whitelist::find("maps.google.com").is_some());
-        assert!(blacklist::find("maps.google.com").is_none());
-
-        // translate.google.com would also match *s.google.com but is whitelisted
-        assert!(whitelist::find("translate.google.com").is_some());
-        assert!(blacklist::find("translate.google.com").is_none());
+        assert_eq!(filter.check_domain("example.com"), FilterResult::Allow);
+        assert_eq!(filter.check_domain("signal.org"), FilterResult::Allow);
     }
 }
