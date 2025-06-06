@@ -1,141 +1,193 @@
-use chrono::{DateTime, Duration, Local};
 use hickory_proto::{
     op::Message,
     rr::{Name, RecordType},
 };
-use std::collections::{HashMap, VecDeque};
+use std::{
+    collections::{HashMap, VecDeque},
+    time::{Duration, Instant},
+};
 
 pub struct Cache {
-    entries: HashMap<CacheKey, CacheEntry>,
-    insertion_order: VecDeque<CacheKey>,
-    last_cleanup: DateTime<Local>,
-    cleanup_interval: Duration,
-}
-
-impl Default for Cache {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[derive(Clone, Debug, Hash, Eq, PartialEq)]
-struct CacheKey {
-    pub name: Name,
-    pub record_type: RecordType,
+    capacity: usize,
+    entries: HashMap<(Name, RecordType), CacheEntry>,
+    lru_keys: VecDeque<(Name, RecordType)>,
 }
 
 #[derive(Clone, Debug)]
 struct CacheEntry {
     pub response: Message,
-    pub expires_at: DateTime<Local>,
+    pub expires_at: Instant,
 }
 
 const FIVE_MINUTES: u32 = 300;
-const CACHE_CAPACITY: usize = 1000;
 
 impl Cache {
-    pub fn new() -> Self {
+    pub fn new(capacity: usize) -> Self {
         Self {
-            entries: HashMap::new(),
-            insertion_order: VecDeque::with_capacity(CACHE_CAPACITY),
-            last_cleanup: Local::now(),
-            cleanup_interval: Duration::seconds(60),
+            capacity,
+            entries: HashMap::with_capacity(capacity),
+            lru_keys: VecDeque::with_capacity(capacity),
         }
     }
 
     pub fn get(&mut self, name: &Name, record_type: RecordType) -> Option<Message> {
-        self.cleanup();
+        let now = Instant::now();
+        let key = (name.clone(), record_type);
+        let entry = self.entries.get(&key)?;
 
-        let key = CacheKey {
-            name: name.clone(),
-            record_type,
-        };
+        if entry.expires_at < now {
+            self.entries.remove(&key);
+            self.remove_from_lru(&key);
+            return None;
+        }
 
-        self.entries
-            .get(&key)
-            .filter(|entry| entry.expires_at > Local::now())
-            .map(|entry| entry.response.clone())
+        let remaining = entry.expires_at.saturating_duration_since(now);
+        let new_ttl = remaining.as_secs() as u32;
+
+        let mut message = entry.response.clone();
+
+        for answer in message.answers_mut() {
+            answer.set_ttl(new_ttl);
+        }
+
+        self.remove_from_lru(&key);
+        self.lru_keys.push_back(key.clone());
+
+        Some(message)
     }
 
     pub fn insert(&mut self, name: &Name, record_type: RecordType, response: &Message) {
+        let now = Instant::now();
         let ttl = response
             .answers()
             .iter()
             .map(|record| record.ttl())
-            .filter(|&ttl| ttl > 0)
             .min()
             .unwrap_or(FIVE_MINUTES);
 
-        let expires_at = Local::now() + Duration::seconds(ttl as i64);
-
-        let key = CacheKey {
-            name: name.clone(),
-            record_type,
-        };
-
-        if self.entries.contains_key(&key) {
-            self.insertion_order.retain(|k| k != &key);
+        if ttl == 0 {
+            return;
         }
 
+        let expires_at: Instant = now
+            .checked_add(Duration::from_secs(ttl as u64))
+            .unwrap_or_else(|| now + Duration::from_secs(FIVE_MINUTES as u64));
+
+        let key = (name.clone(), record_type);
         let entry = CacheEntry {
             response: response.clone(),
             expires_at,
         };
 
         self.entries.insert(key.clone(), entry);
-        self.insertion_order.push_back(key);
+        self.lru_keys.push_back(key);
 
-        while self.entries.len() > CACHE_CAPACITY {
-            if let Some(oldest_key) = self.insertion_order.pop_front() {
+        if self.entries.len() > self.capacity {
+            if let Some(oldest_key) = self.lru_keys.pop_front() {
                 self.entries.remove(&oldest_key);
             }
         }
     }
 
-    fn cleanup(&mut self) {
-        let now = Local::now();
-        if now - self.last_cleanup > self.cleanup_interval {
-            self.entries.retain(|_, entry| entry.expires_at > now);
-            self.last_cleanup = now;
+    fn remove_from_lru(&mut self, key: &(Name, RecordType)) {
+        if let Some(pos) = self.lru_keys.iter().position(|k| k == key) {
+            self.lru_keys.remove(pos);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr as _;
+    use super::*;
+    use hickory_proto::rr::{RData, Record};
+    use std::str::FromStr;
+
+    fn make_message(name_str: &str, ttl: u32) -> Message {
+        let mut msg = Message::new();
+        let name = Name::from_str(name_str).unwrap();
+        let record = Record::from_rdata(name.clone(), ttl, RData::A("1.2.3.4".parse().unwrap()));
+        msg.add_answer(record);
+        msg
+    }
 
     #[test]
-    fn ensure_cache_eviction_policy() {
-        use super::*;
-        let mut cache = Cache::new();
-        let response = Message::new();
+    fn ttl_decreases_on_get() {
+        let mut cache = Cache::new(10);
+        let name = Name::from_str("example.com").unwrap();
+        let msg = make_message("example.com", 5);
 
-        for i in 0..CACHE_CAPACITY + 100 {
-            let name = Name::from_str(&format!("example{i}.com")).unwrap();
-            cache.insert(&name, RecordType::A, &response);
-        }
+        cache.insert(&name, RecordType::A, &msg);
 
-        assert_eq!(cache.entries.len(), CACHE_CAPACITY);
+        let fetched = cache.get(&name, RecordType::A).expect("Should be in cache");
+
+        let returned_ttl = fetched.answers()[0].ttl();
+        assert!(returned_ttl < 5, "TTL should have ticked down");
+        assert!(returned_ttl > 0, "TTL should still be positive");
+    }
+
+    #[test]
+    fn zero_ttl_should_not_be_cached() {
+        let mut cache = Cache::new(10);
+        let name = Name::from_str("example.com").unwrap();
+        let msg = make_message("example.com", 0);
+
+        cache.insert(&name, RecordType::A, &msg);
+
+        assert!(cache.entries.is_empty(), "Zero TTL should not be cached");
+    }
+
+    #[test]
+    fn capacity_eviction_oldest_removed() {
+        let mut cache = Cache::new(2);
+        let a = Name::from_str("one.com").unwrap();
+        let b = Name::from_str("two.com").unwrap();
+        let c = Name::from_str("three.com").unwrap();
+        let msg = make_message("x.com", 300);
+
+        cache.insert(&a, RecordType::A, &msg);
+        cache.insert(&b, RecordType::A, &msg);
+
+        // Sanity: both are in the map
+        assert!(cache.entries.contains_key(&(a.clone(), RecordType::A)));
+        assert!(cache.entries.contains_key(&(b.clone(), RecordType::A)));
+
+        // Now overflow
+        cache.insert(&c, RecordType::A, &msg);
+
+        // A must be gone, B and C remain
+        assert!(!cache.entries.contains_key(&(a.clone(), RecordType::A)));
+        assert!(cache.entries.contains_key(&(b.clone(), RecordType::A)));
+        assert!(cache.entries.contains_key(&(c.clone(), RecordType::A)));
+    }
+
+    #[test]
+    fn lru_eviction_keeps_recently_used() {
+        let mut cache = Cache::new(2);
+        let n1 = Name::from_str("one.com").unwrap();
+        let n2 = Name::from_str("two.com").unwrap();
+        let n3 = Name::from_str("three.com").unwrap();
+
+        let msg1 = make_message("one.com", 300);
+        let msg2 = make_message("two.com", 300);
+        let msg3 = make_message("three.com", 300);
+
+        // Insert A and B
+        cache.insert(&n1, RecordType::A, &msg1);
+        cache.insert(&n2, RecordType::A, &msg2);
+
+        // The front is the least recently used
+        assert_eq!(cache.lru_keys.front(), Some(&(n1.clone(), RecordType::A)));
+
+        // Access A to make it the most recently used
+        assert!(cache.get(&n1, RecordType::A).is_some());
+
+        // Insert C, which should evict B (the least recently used)
+        cache.insert(&n3, RecordType::A, &msg3);
         assert!(
-            cache
-                .entries
-                .get(&CacheKey {
-                    name: Name::from_str("example0.com").unwrap(),
-                    record_type: RecordType::A,
-                })
-                .is_none(),
-            "Oldest entry should be removed when capacity is exceeded"
+            cache.get(&n2, RecordType::A).is_none(),
+            "Least recently used entry (two.com) should be evicted"
         );
-        assert!(
-            cache
-                .entries
-                .get(&CacheKey {
-                    name: Name::from_str("example100.com").unwrap(),
-                    record_type: RecordType::A,
-                })
-                .is_some(),
-            "New entries should still be added"
-        );
+        assert!(cache.get(&n1, RecordType::A).is_some());
+        assert!(cache.get(&n3, RecordType::A).is_some());
     }
 }

@@ -34,7 +34,6 @@ serde = { version = "1.0.159", default-features = false, features = ["derive"] }
 hickory-proto = { version = "0.25.2", default-features = false }
 bytes = "1.4.0"
 wildmatch = "2.1.1"
-chrono = "0.4.24"
 tabwriter = "1.2.1"
 idna = "0.4.0"
 anyhow = "1.0.72"

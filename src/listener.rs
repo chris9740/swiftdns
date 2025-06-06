@@ -96,7 +96,7 @@ async fn handle_message(
 pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
     let filter = DnsFilter::from_default_path()?;
     let client = Client::connect(config).await?;
-    let mut cache = Cache::new();
+    let mut cache = Cache::new(1000);
 
     let socket = match UdpSocket::bind(addr) {
         Ok(socket) => socket,
