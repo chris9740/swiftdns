@@ -57,7 +57,7 @@ tracing = ["dep:tracing", "dep:tracing-subscriber"]
 
 [package.metadata.deb]
 revision = ""
-maintainer-scripts = "debian/"
+maintainer-scripts = "assets/debian/"
 systemd-units = { enable = true }
 assets = [
     [
