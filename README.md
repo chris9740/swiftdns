@@ -67,7 +67,7 @@ For those seeking an extra layer of privacy, Swiftdns also offers the option to 
 
 ## Blacklisting
 
-Swiftdns will look for our blacklist rules inside `.list` files located in `/etc/swiftdns/filters/` and any of its immediate subdirectories, in case you want to organize your rules.
+Swiftdns will look for our blacklist rules inside `.list` files located in `/etc/swiftdns/filters/`.
 
 **Important:** You need to restart the service after creating or modifying any of these files for the changes to take effect.
 
