@@ -53,25 +53,13 @@ fn simulate_dns_response(message: &Message) -> Result<Message, DnsError> {
 
         match name.as_str() {
             "example.com" if record_type == RecordType::A => {
-                let ip = "93.184.216.34"
-                    .parse()
-                    .map_err(|_| DnsError::RecordDataFormatError("Invalid IP".to_string()))?;
-
+                let ip = "93.184.216.34".parse().expect("Failed to parse IP address");
                 let rdata = RData::A(ip);
                 let record = Record::from_rdata(query.name().clone(), 300, rdata);
                 response.add_answer(record);
             }
             "nxdomain.example" => {
                 response.set_response_code(ResponseCode::NXDomain);
-            }
-            _ if record_type == RecordType::A => {
-                let ip = "192.0.2.1"
-                    .parse()
-                    .map_err(|_| DnsError::RecordDataFormatError("Invalid IP".to_string()))?;
-
-                let rdata = RData::A(ip);
-                let record = Record::from_rdata(query.name().clone(), 300, rdata);
-                response.add_answer(record);
             }
             _ => {
                 response.set_response_code(ResponseCode::NotImp);

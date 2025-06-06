@@ -31,8 +31,9 @@ fn test_resolve_command() {
     assert
         .success()
         .stdout(predicate::str::contains("Upstream DNS: dns.swiftdns.mock"))
-        .stdout(predicate::str::contains("93.184.216.34"))
-        .stdout(predicate::str::contains("Upstream DNS:"))
+        .stdout(predicate::str::contains(
+            "example.com  A (1)  300  93.184.216.34",
+        ))
         .stdout(predicate::str::contains("(1 record found"));
 
     let mut cmd = test_command();
