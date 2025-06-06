@@ -4,7 +4,7 @@ use colored::*;
 use std::io::Write;
 use tabwriter::TabWriter;
 
-use crate::config::SwiftConfig;
+use crate::config::{get_config_path, SwiftConfig, CONFIG_FILE_NAME};
 
 pub async fn execute(config: &SwiftConfig) -> Result<()> {
     println!("{}", "Swiftdns Status".bold());
@@ -19,6 +19,12 @@ pub async fn execute(config: &SwiftConfig) -> Result<()> {
     let mut tw = TabWriter::new(vec![]);
 
     writeln!(tw, "{}", "Configuration:".bold())?;
+    writeln!(
+        tw,
+        "  {}:\t{}",
+        "Config path".cyan(),
+        get_config_path().join(CONFIG_FILE_NAME).display()
+    )?;
     writeln!(tw, "  {}:\t{}", "Listening address".cyan(), config.address)?;
     writeln!(tw, "  {}:\t{}", "Resolver URL".cyan(), config.resolver.url)?;
 
@@ -37,7 +43,10 @@ pub async fn execute(config: &SwiftConfig) -> Result<()> {
         "  {}:\t{}",
         "Tor enabled".cyan(),
         if config.tor.enabled {
-            format!("Yes ({})", config.tor.get_address()?)
+            format!(
+                "Yes ({})",
+                format!("socks5h://{}", config.tor.get_address()?).bright_black()
+            )
         } else {
             "No".to_string()
         }

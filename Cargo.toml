@@ -17,8 +17,8 @@ panic = "abort"
 
 [profile.release]
 strip = true
-lto = false
-codegen-units = 256
+lto = "thin"
+codegen-units = 128
 
 [dependencies]
 tokio = { version = "1", default-features = false, features = [

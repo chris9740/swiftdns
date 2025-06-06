@@ -3,6 +3,8 @@ pub mod commands;
 use anyhow::Result;
 use clap::{crate_description, crate_version, Parser, Subcommand};
 
+use crate::config::get_config;
+
 #[derive(Parser)]
 #[command(
     about = crate_description!(),
@@ -28,7 +30,7 @@ pub enum Commands {
 
 pub async fn start() -> Result<()> {
     let args = Cli::parse();
-    let config = crate::config::get_config()?;
+    let config = get_config()?;
 
     match args.command {
         Commands::Demo(args) => commands::demo::execute(args).await,

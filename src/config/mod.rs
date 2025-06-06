@@ -14,6 +14,8 @@ use crate::Domain;
 
 use self::error::ConfigError;
 
+pub const CONFIG_FILE_NAME: &str = "config.toml";
+
 const DEFAULT_TOR_ADDR: &str = "127.0.0.1:9050";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -107,7 +109,7 @@ impl SwiftConfig {
 }
 
 pub fn get_config() -> Result<SwiftConfig, ConfigError> {
-    let config_path = get_config_path().join("config.toml");
+    let config_path = get_config_path().join(CONFIG_FILE_NAME);
 
     if !config_path.exists() {
         create_default_config(&config_path)?;
