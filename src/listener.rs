@@ -1,6 +1,8 @@
 use std::{
+    collections::HashMap,
     io::ErrorKind,
     net::{IpAddr, SocketAddr, UdpSocket},
+    time::{Duration, Instant},
 };
 
 use anyhow::Result;
@@ -18,6 +20,37 @@ use crate::{
     http::Client,
     upstream,
 };
+
+struct BurstTracker {
+    registry: HashMap<String, Instant>,
+    burst_duration_secs: Duration,
+}
+
+impl BurstTracker {
+    fn new() -> Self {
+        Self {
+            registry: HashMap::new(),
+            burst_duration_secs: Duration::from_secs(15),
+        }
+    }
+
+    fn is_bursting(&mut self, key: &str) -> bool {
+        let now = Instant::now();
+
+        self.registry
+            .retain(|_, &mut t| now.duration_since(t) < self.burst_duration_secs);
+
+        let is_bursting = match self.registry.get_mut(key) {
+            Some(ts) if now.duration_since(*ts) < self.burst_duration_secs => true,
+            _ => {
+                self.registry.insert(key.to_string(), now);
+                false
+            }
+        };
+
+        is_bursting
+    }
+}
 
 fn create_response_base(message: &Message) -> Message {
     let mut response = message.clone();
@@ -37,6 +70,7 @@ async fn handle_message(
     config: &SwiftConfig,
     filter: &DnsFilter,
     cache: &mut Cache,
+    burst_tracker: &mut BurstTracker,
 ) -> Result<Message, DnsError> {
     // RFC 1035 allows multiple queries per message for forward compatibility.
     // This feature is not implemented or used in practice
@@ -59,12 +93,15 @@ async fn handle_message(
     };
 
     if let FilterResult::Block(rule) = filter.check_domain(&domain.name()).await {
-        eprintln!(
-            "Query for {} refused (pattern `{}`, path `{}`)",
-            domain.name(),
-            rule.original_pattern(),
-            rule.path()
-        );
+        if !burst_tracker.is_bursting(&domain.name()) {
+            eprintln!(
+                "Query for {} refused (pattern `{}`, path `{}`)",
+                domain.name(),
+                rule.original_pattern(),
+                rule.path()
+            );
+        }
+
         let mut response = create_response_base(message);
         response.set_response_code(ResponseCode::Refused);
         return Ok(response);
@@ -104,6 +141,7 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
 
     let client = Client::connect(config).await?;
     let mut cache = Cache::new(1000);
+    let mut burst_tracker = BurstTracker::new();
 
     let socket = match UdpSocket::bind(addr) {
         Ok(socket) => socket,
@@ -130,7 +168,16 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
         }
 
         if let Ok(message) = Message::from_bytes(&buf[..amt]) {
-            match handle_message(&message, &client, config, &filter, &mut cache).await {
+            match handle_message(
+                &message,
+                &client,
+                config,
+                &filter,
+                &mut cache,
+                &mut burst_tracker,
+            )
+            .await
+            {
                 Ok(response) => {
                     socket.send_to(&response.to_bytes()?, src)?;
                 }
