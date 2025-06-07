@@ -9,10 +9,10 @@ pub async fn execute(args: DemoArgs) -> Result<()> {
     let filter = if std::env::var("SWIFTDNS_CLI_TEST_MODE").is_ok() {
         DnsFilter::from_mock_data()
     } else {
-        DnsFilter::from_default_path()?
+        DnsFilter::from_default_path().await?
     };
 
-    if let FilterResult::Block(rule) = filter.check_domain(&args.domain.name()) {
+    if let FilterResult::Block(rule) = filter.check_domain(&args.domain.name()).await {
         println!(
             "{} is blacklisted {}",
             args.domain.name().red(),

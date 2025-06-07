@@ -58,7 +58,7 @@ async fn handle_message(
         }
     };
 
-    if let FilterResult::Block(rule) = filter.check_domain(&domain.name()) {
+    if let FilterResult::Block(rule) = filter.check_domain(&domain.name()).await {
         eprintln!(
             "Query for {} refused (pattern `{}`, path `{}`)",
             domain.name(),
@@ -94,7 +94,14 @@ async fn handle_message(
 }
 
 pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
-    let filter = DnsFilter::from_default_path()?;
+    let filter = DnsFilter::from_default_path().await?;
+
+    #[cfg(feature = "notify")]
+    if let Err(e) = filter.start_watching().await {
+        eprintln!("Warning: Failed to start filter file watching: {}", e);
+        eprintln!("Filter hot-reloading will not be available");
+    }
+
     let client = Client::connect(config).await?;
     let mut cache = Cache::new(1000);
 

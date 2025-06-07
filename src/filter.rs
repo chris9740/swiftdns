@@ -1,5 +1,5 @@
-use std::{fs, path::Path};
-
+use std::{fs, path::Path, sync::Arc};
+use tokio::sync::RwLock;
 use wildmatch::WildMatch;
 
 use crate::config;
@@ -8,6 +8,8 @@ use crate::config;
 #[error("Filter error: {0}")]
 pub enum FilterError {
     IoError(String),
+    #[cfg(feature = "notify")]
+    WatchError(String),
 }
 
 impl From<std::io::Error> for FilterError {
@@ -16,53 +18,154 @@ impl From<std::io::Error> for FilterError {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct DnsFilter {
+#[cfg(feature = "notify")]
+impl From<notify::Error> for FilterError {
+    fn from(err: notify::Error) -> Self {
+        FilterError::WatchError(err.to_string())
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+struct DnsFilterInner {
     filters: Vec<FilterData>,
     whitelist: Vec<FilterPattern>,
 }
 
-#[derive(Debug, Default, Clone)]
-pub struct FilterData {
-    exact_matches: Vec<FilterPattern>,
-    domain_matches: Vec<FilterPattern>,
-    wildcard_patterns: Vec<FilterPattern>,
+#[derive(Debug, Clone)]
+pub struct DnsFilter {
+    inner: Arc<RwLock<DnsFilterInner>>,
 }
 
-impl FilterData {
-    pub fn add_pattern(&mut self, pattern: FilterPattern) {
-        match &pattern {
-            FilterPattern::Exact { .. } => self.exact_matches.push(pattern),
-            FilterPattern::Domain { .. } => self.domain_matches.push(pattern),
-            FilterPattern::Wildcard { .. } => self.wildcard_patterns.push(pattern),
-        }
+impl Default for DnsFilter {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 impl DnsFilter {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            inner: Arc::new(RwLock::new(DnsFilterInner::default())),
+        }
     }
 
-    pub fn from_default_path() -> Result<Self, FilterError> {
-        Self::from_path(config::get_filters_path())
-    }
-
-    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, FilterError> {
-        let mut filter = Self::new();
-        filter.load_filters(path)?;
+    pub async fn from_default_path() -> Result<Self, FilterError> {
+        let filter = Self::new();
+        filter.load_from_default_path().await?;
         Ok(filter)
     }
 
-    fn load_filters<P>(&mut self, path: P) -> Result<(), FilterError>
-    where
-        P: AsRef<Path>,
-    {
-        let file_data = self.read_filter_files(path)?;
-        self.load_filter_data(file_data)
+    pub async fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, FilterError> {
+        let filter = Self::new();
+        filter.load_from_path(path).await?;
+        Ok(filter)
     }
 
-    fn read_filter_files<P>(&self, path: P) -> Result<Vec<(String, String)>, FilterError>
+    pub async fn check_domain(&self, domain: &str) -> FilterResult {
+        let filter = self.inner.read().await;
+        Self::check_domain_impl(&filter, domain)
+    }
+
+    async fn load_from_default_path(&self) -> Result<(), FilterError> {
+        self.load_from_path(config::get_filters_path()).await
+    }
+
+    async fn load_from_path<P: AsRef<Path>>(&self, path: P) -> Result<(), FilterError> {
+        let file_data = Self::read_filter_files(path)?;
+        let mut filter = self.inner.write().await;
+        Self::load_filter_data(&mut filter, file_data)?;
+        Ok(())
+    }
+
+    pub async fn reload(&self) -> Result<(), FilterError> {
+        self.load_from_default_path().await?;
+        println!("Filters reloaded successfully");
+        Ok(())
+    }
+
+    #[cfg(feature = "notify")]
+    pub async fn start_watching(&self) -> Result<(), FilterError> {
+        use notify::{Event, EventKind, RecursiveMode, Watcher};
+        use tokio::sync::mpsc;
+
+        let (tx, mut rx) = mpsc::channel(100);
+        let filter_path = config::get_filters_path();
+        let filter_clone = self.clone();
+
+        tokio::spawn(async move {
+            let mut watcher =
+                match notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
+                    if let Ok(event) = res {
+                        if matches!(
+                            event.kind,
+                            EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
+                        ) {
+                            for path in &event.paths {
+                                if path.extension().and_then(|s| s.to_str()) == Some("list") {
+                                    if let Err(e) = tx.try_send(()) {
+                                        eprintln!("Failed to send reload signal: {}", e);
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }) {
+                    Ok(watcher) => watcher,
+                    Err(e) => {
+                        eprintln!("Failed to create file watcher: {}", e);
+                        return;
+                    }
+                };
+
+            if let Err(e) = watcher.watch(&filter_path, RecursiveMode::NonRecursive) {
+                eprintln!("Failed to watch filter directory: {}", e);
+                return;
+            }
+
+            println!(
+                "Started watching for filter changes in: {}",
+                filter_path.display()
+            );
+
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            }
+        });
+
+        tokio::spawn(async move {
+            const DEBOUNCE_DURATION: tokio::time::Duration =
+                tokio::time::Duration::from_millis(500);
+
+            while rx.recv().await.is_some() {
+                loop {
+                    match tokio::time::timeout(DEBOUNCE_DURATION, rx.recv()).await {
+                        Ok(Some(())) => {
+                            // Got another event, continue draining
+                        }
+                        Ok(None) => {
+                            // Channel closed
+                            return;
+                        }
+                        Err(_) => {
+                            // Timeout reached, no more events - time to reload
+                            break;
+                        }
+                    }
+                }
+
+                if let Err(e) = filter_clone.reload().await {
+                    eprintln!("Failed to reload filters: {}", e);
+                } else {
+                    println!("Filter files changed, reloaded automatically");
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    fn read_filter_files<P>(path: P) -> Result<Vec<(String, String)>, FilterError>
     where
         P: AsRef<Path>,
     {
@@ -103,7 +206,13 @@ impl DnsFilter {
         Ok(file_data)
     }
 
-    fn load_filter_data(&mut self, files: Vec<(String, String)>) -> Result<(), FilterError> {
+    fn load_filter_data(
+        filter: &mut DnsFilterInner,
+        files: Vec<(String, String)>,
+    ) -> Result<(), FilterError> {
+        filter.filters.clear();
+        filter.whitelist.clear();
+
         for (filename, contents) in files {
             let is_whitelist = filename == "whitelist.list";
             let mut line_number = 0;
@@ -123,30 +232,30 @@ impl DnsFilter {
                 let filter_pattern = Self::parse_pattern(pattern, &filename, line_number);
 
                 if is_whitelist {
-                    self.whitelist.push(filter_pattern);
+                    filter.whitelist.push(filter_pattern);
                 } else {
                     blacklist_data.as_mut().unwrap().add_pattern(filter_pattern);
                 }
             }
 
             if let Some(data) = blacklist_data {
-                self.filters.push(data);
+                filter.filters.push(data);
             }
         }
         Ok(())
     }
 
-    pub fn check_domain(&self, domain: &str) -> FilterResult {
-        if let Some(pattern) = self.whitelist.iter().find(|rule| rule.matches(domain)) {
+    fn check_domain_impl(filter: &DnsFilterInner, domain: &str) -> FilterResult {
+        if let Some(pattern) = filter.whitelist.iter().find(|rule| rule.matches(domain)) {
             return FilterResult::Whitelisted(pattern.clone());
         }
 
-        for filter in &self.filters {
+        for filter_data in &filter.filters {
             let mut patterns = Vec::new();
 
-            patterns.extend(&filter.exact_matches);
-            patterns.extend(&filter.domain_matches);
-            patterns.extend(&filter.wildcard_patterns);
+            patterns.extend(&filter_data.exact_matches);
+            patterns.extend(&filter_data.domain_matches);
+            patterns.extend(&filter_data.wildcard_patterns);
 
             for pattern in patterns {
                 if pattern.matches(domain) {
@@ -182,7 +291,7 @@ impl DnsFilter {
     }
 
     pub fn from_mock_data() -> Self {
-        let mut filter = Self::default();
+        let mut filter = Self::new();
 
         let mock_files = vec![
             (
@@ -232,8 +341,28 @@ impl DnsFilter {
             ),
         ];
 
-        filter.load_filter_data(mock_files).unwrap();
+        let mut inner = DnsFilterInner::default();
+        Self::load_filter_data(&mut inner, mock_files).unwrap();
+
+        filter.inner = Arc::new(RwLock::new(inner));
         filter
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct FilterData {
+    exact_matches: Vec<FilterPattern>,
+    domain_matches: Vec<FilterPattern>,
+    wildcard_patterns: Vec<FilterPattern>,
+}
+
+impl FilterData {
+    pub fn add_pattern(&mut self, pattern: FilterPattern) {
+        match &pattern {
+            FilterPattern::Exact { .. } => self.exact_matches.push(pattern),
+            FilterPattern::Domain { .. } => self.domain_matches.push(pattern),
+            FilterPattern::Wildcard { .. } => self.wildcard_patterns.push(pattern),
+        }
     }
 }
 
@@ -315,18 +444,19 @@ pub enum FilterResult {
 mod tests {
     use crate::filter::{DnsFilter, FilterPattern, FilterResult};
 
-    #[test]
-    fn test_filter_loading() {
+    #[tokio::test]
+    async fn test_filter_loading() {
         let filter = DnsFilter::from_mock_data();
-        assert_eq!(filter.filters.len(), 2);
+        let inner = filter.inner.read().await;
+        assert_eq!(inner.filters.len(), 2);
     }
 
-    #[test]
-    fn test_blacklisted_gets_blocked() {
+    #[tokio::test]
+    async fn test_blacklisted_gets_blocked() {
         let filter = DnsFilter::from_mock_data();
 
         assert_eq!(
-            filter.check_domain("facebook.com"),
+            filter.check_domain("facebook.com").await,
             FilterResult::Block(FilterPattern::Exact {
                 pattern: "^facebook.com".to_string(),
                 filename: "social-media.list".to_string(),
@@ -335,7 +465,7 @@ mod tests {
             })
         );
         assert_eq!(
-            filter.check_domain("www.facebook.com"),
+            filter.check_domain("www.facebook.com").await,
             FilterResult::Block(FilterPattern::Exact {
                 pattern: "^www.facebook.com".to_string(),
                 filename: "social-media.list".to_string(),
@@ -344,7 +474,7 @@ mod tests {
             })
         );
         assert_eq!(
-            filter.check_domain("instagram.com"),
+            filter.check_domain("instagram.com").await,
             FilterResult::Block(FilterPattern::Domain {
                 pattern: "instagram.com".to_string(),
                 filename: "social-media.list".to_string(),
@@ -352,7 +482,7 @@ mod tests {
             })
         );
         assert_eq!(
-            filter.check_domain("tiktokvideo.com"),
+            filter.check_domain("tiktokvideo.com").await,
             FilterResult::Block(FilterPattern::Wildcard {
                 pattern: "*tiktok*".to_string(),
                 filename: "social-media.list".to_string(),
@@ -361,12 +491,12 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_whitelisted_is_allowed() {
+    #[tokio::test]
+    async fn test_whitelisted_is_allowed() {
         let filter = DnsFilter::from_mock_data();
 
         assert_eq!(
-            filter.check_domain("packages.microsoft.com"),
+            filter.check_domain("packages.microsoft.com").await,
             FilterResult::Whitelisted(FilterPattern::Exact {
                 pattern: "^packages.microsoft.com".to_string(),
                 filename: "whitelist.list".to_string(),
@@ -375,7 +505,7 @@ mod tests {
             })
         );
         assert_eq!(
-            filter.check_domain("vscode.microsoft.com"),
+            filter.check_domain("vscode.microsoft.com").await,
             FilterResult::Whitelisted(FilterPattern::Exact {
                 pattern: "^vscode.microsoft.com".to_string(),
                 filename: "whitelist.list".to_string(),
@@ -384,7 +514,7 @@ mod tests {
             })
         );
         assert_eq!(
-            filter.check_domain("github.com"),
+            filter.check_domain("github.com").await,
             FilterResult::Whitelisted(FilterPattern::Domain {
                 pattern: "github.com".to_string(),
                 filename: "whitelist.list".to_string(),
@@ -392,7 +522,7 @@ mod tests {
             })
         );
         assert_eq!(
-            filter.check_domain("api.example.com"),
+            filter.check_domain("api.example.com").await,
             FilterResult::Whitelisted(FilterPattern::Wildcard {
                 pattern: "api.*.com".to_string(),
                 filename: "whitelist.list".to_string(),
@@ -401,11 +531,19 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_non_blacklisted_is_allowed() {
-        let filter = DnsFilter::from_default_path().expect("Failed to read filters");
+    #[tokio::test]
+    async fn test_non_blacklisted_is_allowed() {
+        let filter = DnsFilter::from_default_path()
+            .await
+            .expect("Failed to read filters");
 
-        assert_eq!(filter.check_domain("example.com"), FilterResult::Allow);
-        assert_eq!(filter.check_domain("signal.org"), FilterResult::Allow);
+        assert_eq!(
+            (filter.check_domain("example.com")).await,
+            FilterResult::Allow
+        );
+        assert_eq!(
+            (filter.check_domain("signal.org")).await,
+            FilterResult::Allow
+        );
     }
 }
