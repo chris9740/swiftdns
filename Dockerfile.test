@@ -13,7 +13,7 @@ echo "Testing SwiftDNS package installation..."
 dpkg -i /tmp/*.deb || exit 1
 
 # We need to run a command before the configuration file is created
-swiftdns demo facebook.com
+swiftdns check facebook.com
 
 test -f /etc/swiftdns/config.toml || exit 1
 test -f /usr/bin/swiftdns || exit 1
@@ -21,7 +21,7 @@ test -f /lib/systemd/system/swiftdns.service || exit 1
 
 # Test basic functionality
 swiftdns --help >/dev/null
-swiftdns demo google.com | grep -q "not blacklisted\|blacklisted"
+swiftdns check google.com | grep -q "not blacklisted\|blacklisted"
 
 echo "✅ Package installation test passed!"
 echo "  ✓ Package installs without errors"

@@ -7,16 +7,16 @@ fn test_command() -> Command {
 }
 
 #[test]
-fn test_demo_command() {
+fn test_check_command() {
     let mut cmd = Command::cargo_bin("swiftdns").unwrap();
-    let assert = cmd.arg("demo").arg("example.com").assert();
+    let assert = cmd.arg("check").arg("example.com").assert();
 
     assert
         .success()
         .stdout(predicate::str::contains("example.com is not blacklisted"));
 
     let mut cmd = Command::cargo_bin("swiftdns").unwrap();
-    let assert = cmd.arg("demo").arg("facebook.com").assert();
+    let assert = cmd.arg("check").arg("facebook.com").assert();
 
     assert.success().stdout(predicate::str::contains(
         "facebook.com is blacklisted (matched with `^facebook.com`, found in `social-media.list:1`)",

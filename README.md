@@ -129,7 +129,7 @@ Let's make use of comments to describe our rules:
 tiktok*.com*
 ```
 
-**Tip** - Test your rules with `swiftdns demo example.com`. This will show you whether this domain would be blocked or not. No queries will be sent to the DNS provider.
+**Tip** - Test your rules with `swiftdns check example.com`. This will show you whether this domain would be blocked or not. No queries will be sent to the DNS provider.
 
 ## Whitelisting
 
@@ -262,12 +262,12 @@ $ swiftdns resolve <domain> [type: A] [--tor]
 
 ---
 
-### Demo
+### Check
 
 Test if a domain would be blocked by the current filters without actually sending a DNS query.
 
 ```bash
-$ swiftdns demo <domain>
+$ swiftdns check <domain>
 ```
 
 This command will output whether the domain is blocked or not, without sending any queries to the DNS provider.

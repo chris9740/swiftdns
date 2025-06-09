@@ -19,7 +19,7 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     #[command(about = "Test if a domain would be blocked by the blacklist")]
-    Demo(commands::demo::DemoArgs),
+    Check(commands::check::CheckArgs),
     #[command(about = "Start the DNS listener")]
     Start(commands::start::StartArgs),
     #[command(about = "Resolve a domain name")]
@@ -33,7 +33,7 @@ pub async fn start() -> Result<()> {
     let config = get_config()?;
 
     match args.command {
-        Commands::Demo(args) => commands::demo::execute(args).await,
+        Commands::Check(args) => commands::check::execute(args).await,
         Commands::Start(args) => commands::start::execute(args, &config).await,
         Commands::Resolve(args) => commands::resolve::execute(args, &config).await,
         Commands::Status => commands::status::execute(&config).await,

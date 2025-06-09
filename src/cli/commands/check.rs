@@ -3,9 +3,9 @@ use colored::Colorize;
 
 use crate::filter::{DnsFilter, FilterResult};
 
-pub use super::resolve::ResolveArgs as DemoArgs;
+pub use super::resolve::ResolveArgs as CheckArgs;
 
-pub async fn execute(args: DemoArgs) -> Result<()> {
+pub async fn execute(args: CheckArgs) -> Result<()> {
     let filter = if std::env::var("SWIFTDNS_CLI_TEST_MODE").is_ok() {
         DnsFilter::from_mock_data()
     } else {
