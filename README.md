@@ -69,7 +69,7 @@ For those seeking an extra layer of privacy, Swiftdns also offers the option to 
 
 Swiftdns will look for our blacklist rules inside `.list` files located in `/etc/swiftdns/filters/`.
 
-**Important:** You need to restart the service after creating or modifying any of these files for the changes to take effect.
+**Note:** Filter files are automatically reloaded when changed (hot reload). This feature is enabled by default through the `notify` feature. If you've disabled this feature, you'll need to restart the service after creating or modifying any filter files.
 
 ### Getting Started with Preset Filters
 
@@ -97,7 +97,7 @@ Inside our newly created `/etc/swiftdns/filters/google.list` file, we will enter
 ^www.google.com
 ```
 
-Once we save the file, the rules will go into effect immediately.
+Once we save the file, the rules will go into effect immediately thanks to hot reloading.
 
 If we want to block _all_ subdomains of `google.com`, we can simply add:
 
