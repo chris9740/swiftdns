@@ -9,3 +9,6 @@ bootstrap_ips = ["1.1.1.1:443"]
 [tor]
 enabled = false
 address = "127.0.0.1:9050"
+
+[blocking]
+strategy = "sinkhole"

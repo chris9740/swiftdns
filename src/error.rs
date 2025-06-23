@@ -17,6 +17,9 @@ pub enum DnsError {
 
     #[error("Record data format error: {0}")]
     RecordDataFormatError(String),
+
+    #[error("Dropped")]
+    Dropped,
 }
 
 impl DnsError {

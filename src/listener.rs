@@ -7,11 +7,12 @@ use std::{
 
 use anyhow::Result;
 use hickory_proto::{
-    op::{Message, MessageType, ResponseCode},
+    op::{Message, ResponseCode},
     serialize::binary::{BinDecodable, BinEncodable},
 };
 
 use crate::{
+    blocking::{self, create_response_base},
     cache::Cache,
     config::SwiftConfig,
     domain::DnsName,
@@ -52,18 +53,6 @@ impl BurstTracker {
     }
 }
 
-fn create_response_base(message: &Message) -> Message {
-    let mut response = message.clone();
-
-    response.set_message_type(MessageType::Response);
-    response.set_authoritative(false);
-    response.set_truncated(false);
-    response.set_recursion_available(true);
-    response.set_authentic_data(false);
-
-    response
-}
-
 async fn handle_message(
     message: &Message,
     client: &Client,
@@ -102,9 +91,12 @@ async fn handle_message(
             );
         }
 
-        let mut response = create_response_base(message);
-        response.set_response_code(ResponseCode::Refused);
-        return Ok(response);
+        match blocking::create_blocked_response(message, query.query_type(), &config.blocking) {
+            Some(response) => return Ok(response),
+            None => {
+                return Err(DnsError::Dropped);
+            }
+        }
     }
 
     let mut cached = false;
@@ -180,6 +172,9 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
             {
                 Ok(response) => {
                     socket.send_to(&response.to_bytes()?, src)?;
+                }
+                Err(DnsError::Dropped) => {
+                    // Drop strategy - no response sent (this is intentional)
                 }
                 Err(why) => {
                     eprintln!("Error resolving query: {}", why);

@@ -228,6 +228,52 @@ bootstrap_ips = ["45.90.28.0", "45.90.30.0"]
 url = "https://8.8.8.8/dns-query"
 ```
 
+### Blocking Configuration
+
+The `[blocking]` section controls how Swiftdns responds to queries for blacklisted domains. For most users, the default `sinkhole` strategy is recommended, as it mimics Cloudflare's blocking behavior and prevents fallback resolvers from being used.
+
+You can change the blocking strategy by modifying the `strategy` field in the configuration file:
+
+```toml
+[blocking]
+# How to respond to blocked domains
+# "sinkhole" - Return 0.0.0.0/:: for A/AAAA records, REFUSED for others (default)
+# "nxdomain" - Return NXDOMAIN for all blocked queries (domain doesn't exist)
+# "refused" - Return REFUSED for all blocked queries (warning: may trigger fallback resolvers)
+# "drop" - Drop packets without responding (causes timeout on client side)
+strategy = "sinkhole"
+```
+
+#### Blocking Strategies Explained
+
+**`sinkhole` (default - recommended)**
+
+-   Returns `0.0.0.0` for A records and `::` for AAAA records
+-   Returns REFUSED for other record types (MX, TXT, etc.)
+-   Uses a 1-second TTL so you can change the blocking rules without waiting for cache expiration
+-   Prevents clients from trying fallback DNS resolvers
+-   Mimics Cloudflare's blocking behavior
+
+**`nxdomain`**
+
+-   Returns RCODE 3 (NXDOMAIN) indicating the domain doesn't exist
+-   No SOA record included, so responses are not cached (RFC 2308)
+-   Good compatibility with most applications
+-   Prevents fallback resolver usage
+
+**`refused`**
+
+-   Returns RCODE 5 (REFUSED) for all blocked queries
+-   Best when you need explicit block notifications
+-   **Warning:** may trigger fallback DNS servers – disable any fallbacks to avoid privacy leaks
+
+**`drop` (not recommended for most users)**
+
+-   Silently drops blocked queries without any response
+-   Causes client timeouts (usually 5-30 seconds)
+-   Hardest for applications to detect that blocking is occurring
+-   Poor user experience due to long timeouts
+
 ### Tor Configuration
 
 | Key         | Default          | Value(s)                | Description                              |

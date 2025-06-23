@@ -19,22 +19,11 @@ pub const CONFIG_FILE_NAME: &str = "config.toml";
 const DEFAULT_TOR_ADDR: &str = "127.0.0.1:9050";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TorConfig {
-    pub enabled: bool,
-    pub address: Option<String>,
-}
-
-impl TorConfig {
-    pub fn get_address(&self) -> Result<SocketAddr, ConfigError> {
-        let default_addr: SocketAddr = DEFAULT_TOR_ADDR.parse()?;
-
-        let addr: SocketAddr = match &self.address {
-            Some(addr_str) => addr_str.parse()?,
-            None => default_addr,
-        };
-
-        Ok(addr)
-    }
+pub struct SwiftConfig {
+    pub address: SocketAddr,
+    pub resolver: ResolverConfig,
+    pub tor: TorConfig,
+    pub blocking: BlockConfig,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -44,10 +33,28 @@ pub struct ResolverConfig {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SwiftConfig {
-    pub address: SocketAddr,
-    pub resolver: ResolverConfig,
-    pub tor: TorConfig,
+pub struct TorConfig {
+    pub enabled: bool,
+    pub address: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BlockConfig {
+    pub strategy: BlockStrategy,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum BlockStrategy {
+    #[default]
+    /// Respond with RCODE 0 and synthetic A/AAAA records pointing to a sinkhole IP.
+    Sinkhole,
+    /// Respond with RCODE 3 (NXDOMAIN).
+    NxDomain,
+    /// Respond with RCODE 5 (REFUSED).
+    Refused,
+    /// Drop the query without responding (causing a timeout on the client side).
+    Drop,
 }
 
 impl Default for SwiftConfig {
@@ -61,6 +68,9 @@ impl Default for SwiftConfig {
             tor: TorConfig {
                 enabled: false,
                 address: Some(DEFAULT_TOR_ADDR.to_string()),
+            },
+            blocking: BlockConfig {
+                strategy: BlockStrategy::default(),
             },
         }
     }
@@ -105,6 +115,19 @@ impl SwiftConfig {
         }
 
         Ok(())
+    }
+}
+
+impl TorConfig {
+    pub fn get_address(&self) -> Result<SocketAddr, ConfigError> {
+        let default_addr: SocketAddr = DEFAULT_TOR_ADDR.parse()?;
+
+        let addr: SocketAddr = match &self.address {
+            Some(addr_str) => addr_str.parse()?,
+            None => default_addr,
+        };
+
+        Ok(addr)
     }
 }
 

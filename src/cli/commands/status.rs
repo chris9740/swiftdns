@@ -25,18 +25,8 @@ pub async fn execute(config: &SwiftConfig) -> Result<()> {
         "Config path".cyan(),
         get_config_path().join(CONFIG_FILE_NAME).display()
     )?;
-    writeln!(tw, "  {}:\t{}", "Listening address".cyan(), config.address)?;
-    writeln!(tw, "  {}:\t{}", "Resolver URL".cyan(), config.resolver.url)?;
 
-    let bootstrap_ips = config.resolver.bootstrap_ips.clone().unwrap_or_default();
-    if !bootstrap_ips.is_empty() {
-        let ips = bootstrap_ips
-            .iter()
-            .map(|ip| ip.to_string())
-            .collect::<Vec<_>>()
-            .join(", ");
-        writeln!(tw, "  {}:\t{}", "Bootstrap IPs".cyan(), ips)?;
-    }
+    writeln!(tw, "  {}:\t{}", "Listening address".cyan(), config.address)?;
 
     writeln!(
         tw,
@@ -51,6 +41,18 @@ pub async fn execute(config: &SwiftConfig) -> Result<()> {
             "No".to_string()
         }
     )?;
+
+    writeln!(tw, "  {}:\t{}", "Upstream".cyan(), config.resolver.url)?;
+
+    let bootstrap_ips = config.resolver.bootstrap_ips.clone().unwrap_or_default();
+    if !bootstrap_ips.is_empty() {
+        let ips = bootstrap_ips
+            .iter()
+            .map(|ip| ip.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        writeln!(tw, "   - {}:\t{}", "Bootstrap IPs".cyan(), ips)?;
+    }
 
     tw.flush()?;
     let formatted_output = String::from_utf8(tw.into_inner()?)?;

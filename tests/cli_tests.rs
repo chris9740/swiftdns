@@ -1,9 +1,22 @@
 use assert_cmd::Command;
+use clap::crate_version;
 use predicates::prelude::*;
 
 fn test_command() -> Command {
     std::env::set_var("SWIFTDNS_CLI_TEST_MODE", "1");
     Command::cargo_bin("swiftdns").unwrap()
+}
+
+#[test]
+fn test_status_command() {
+    let mut cmd = test_command();
+    let assert = cmd.arg("status").assert();
+
+    assert
+        .success()
+        .stdout(predicate::str::contains("Swiftdns Status"))
+        .stdout(predicate::str::contains("Version:"))
+        .stdout(predicate::str::contains(crate_version!()));
 }
 
 #[test]
