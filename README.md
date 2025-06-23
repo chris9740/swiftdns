@@ -1,12 +1,16 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Swiftdns logo" width="120"/>
+</p>
+
 # Swiftdns
 
-Swiftdns is a local forwarding DNS resolver tailored for Debian distributions, with a focus on user privacy.
+Swiftdns is a local forwarding DNS resolver tailored for Debian distributions, built to enhance your privacy.
 
 ## Project
 
-Swiftdns enhances your browsing security by seamlessly integrating DNS over HTTPS (DoH) with your local system's existing UDP-based DNS queries. Unlike traditional DNS queries that are visible to ISPs, DoH encrypts your requests, ensuring that the domains you access remain confidential between you and your chosen DNS provider. This setup allows you to take full advantage of secure DNS resolution without any complex configuration. Swiftdns operates quietly in the background, ensuring your DNS queries are both secure and private, with minimal configuration effort on your part.
+Swiftdns aims to improve your privacy and security by integrating DNS-over-HTTPS (DoH) into your existing DNS-over-UDP setup, so you don't have to touch complex system settings. Swiftdns listens on localhost via UDP like a standard resolver, then encrypts and forwards every query over HTTPS to your DoH server, ensuring end-to-end privacy and preventing eavesdropping. You can also define filter rules to block unwanted domains at the DNS level.
 
-For those seeking an extra layer of privacy, Swiftdns also offers the option to route queries through a Tor proxy.
+For an extra layer of privacy, you can route all queries through a Tor proxy. This way, your DNS queries are anonymized even from your DoH provider.
 
 ## Installing
 
@@ -40,10 +44,18 @@ For those seeking an extra layer of privacy, Swiftdns also offers the option to 
     cd swiftdns
     ```
 
-3. **Build and create the package:**
+3. **Build the .deb package**
+
+    To build with the default features, run:
 
     ```bash
     make package
+    ```
+
+    Alternatively, you can run `cargo deb` directly with the desired features:
+
+    ```bash
+    cargo deb --no-default-features --features "tracing"
     ```
 
 4. **Install the package:**
@@ -52,120 +64,106 @@ For those seeking an extra layer of privacy, Swiftdns also offers the option to 
     sudo dpkg -i target/debian/swiftdns_*.deb
     ```
 
-5. **Configure your system to use Swiftdns:**
-   Set your system's DNS resolver to `127.0.0.1` to route queries through Swiftdns. Make sure you don't have any fallback DNS resolvers configured. If Swiftdns refuses to resolve a blacklisted domain, the client might continue to use the fallback resolvers, which would lead to privacy leaks.
+5. **Configure your system to use Swiftdns:**  
+   Set your system's DNS resolver to `127.0.0.1` to route queries through Swiftdns. Make sure you don't have any fallback DNS resolvers configured to prevent DNS leaks.
 
 ## Features
 
-[Blacklisting](#blacklisting) - Queries for domains that you have blacklisted will never get to leave your machine. Useful for blocking websites with poor privacy practices (e.g., Facebook, Tiktok) or adult websites.
-
-[Whitelisting](#whitelisting) - Exempt certain domains from being flagged by the blacklist. This can be used if you want to block e.g., `googleapis.com` and all its subdomains except for `discord-attachments-uploads-prd.storage.googleapis.com`.
-
-[Tor Proxy](#tor) - Route all DNS queries through Tor.
-
-[Custom Resolvers](#configuration) - Configure any DoH provider of your choice, with support for bootstrapping IP addresses to avoid circular DNS dependencies.
+[Blacklisting](#blacklisting) & [Whitelisting](#whitelisting) - Block or allow specific domains using custom rules. Queries for blacklisted domains won't leave your system.  
+[Tor Proxy](#tor) - Route all DNS queries through Tor.  
+[Customization](#configuration) - Customize Swiftdns behavior with a simple configuration file.
 
 ## Blacklisting
 
 Swiftdns will look for our blacklist rules inside `.list` files located in `/etc/swiftdns/filters/`.
 
-**Note:** Filter files are automatically reloaded when changed (hot reload). This feature is enabled by default through the `notify` feature. If you've disabled this feature, you'll need to restart the service after creating or modifying any filter files.
+**Note:** Swiftdns will watch `/etc/swiftdns/filters/` for changes, and automatically reload them. If you compiled without the `notify` feature, you need to restart the service after modifying any filter files.
 
 ### Getting Started with Preset Filters
 
-If you want to get started quickly with some common blocking rules, you can copy the preset filters from the repository:
-
 ```bash
-# Copy all preset filters (optional)
+# Copy all preset filters
 sudo cp assets/filters/*.list /etc/swiftdns/filters/
 
-# Or copy specific preset filters
+# Or copy specific filters
 sudo cp assets/filters/meta.list /etc/swiftdns/filters/
 sudo cp assets/filters/nsfw.list /etc/swiftdns/filters/
 ```
 
-**Note:** These are example filters - review them first to make sure they match your needs.
+Review filters before use.
 
 ### Creating Custom Filters
 
-Knowing this, let's create a `google.list` file to make sure we never accidentally use `google.com` for searching, while still being able to visit subdomains such as `maps.google.com` and `translate.google.com`.
-
-Inside our newly created `/etc/swiftdns/filters/google.list` file, we will enter the following:
+Create `/etc/swiftdns/filters/google.list` and add:
 
 ```
 ^google.com
 ^www.google.com
 ```
 
-Once we save the file, the rules will go into effect immediately thanks to hot reloading.
-
-If we want to block _all_ subdomains of `google.com`, we can simply add:
+This blocks only `google.com` and its `www` subdomain. To block all subdomains, use:
 
 ```
 google.com
 ```
 
-This will block `google.com` and every single subdomain of `google.com`.
-
-In addition to blocking subdomains by default, we can also use simple wildcard matching:
+Wildcards also work:
 
 ```
 *s.google.com
 ```
 
-This will match any domain that ends in `s.google.com`, such as `books.google.com` and `services.google.com`.
-
-Let's make use of comments to describe our rules:
+Comments can help document rules:
 
 ```sh
-# Block any domain that has the word "analytics" anywhere in it
+# Block analytics-related domains
 *analytics*
 
-# Block the new TLD's created by Genius Google that are being widely exploited for phishing and malware
+# Block new TLDs exploited for phishing
 *.zip
 *.mov
 
-# Let's also make sure we block "tiktok.com", "tiktokv.com", "tiktokcdn.com" and all their subdomains
+# Block TikTok domains and subdomains
 tiktok*.com*
 ```
 
-**Tip** - Test your rules with `swiftdns check example.com`. This will show you whether this domain would be blocked or not. No queries will be sent to the DNS provider.
+**Tip** - Test your rules without sending queries:
+
+```bash
+swiftdns check example.com
+```
 
 ## Whitelisting
 
-The syntax for whitelisting is identical to that of blacklisting.
-The only difference is that the rules _have_ to be located in the already-created file `/etc/swiftdns/filters/whitelist.list`.
-The whitelist takes precedence over any blacklist file.
+Whitelisting uses the same syntax as blacklisting. Place rules in `/etc/swiftdns/filters/whitelist.list`. Whitelist rules take precedence over any blacklist.
 
 ## Tor
 
-To achieve the highest level of privacy, you can route your traffic through Tor. See [configuration](#configuration). This will noticeably increase query times. The initial query may take several seconds, while subsequent queries will be significantly faster, usually taking no more than 400ms if you have a fast network. For comparison, normal queries typically take anywhere from 10ms to 80ms.
+Routing queries through Tor increases privacy at the cost of latency. Initial queries may take several seconds; subsequent queries typically finish in less than 400 ms. For comparison, normal DoH queries take ~ 5-80 ms. You can enable Tor routing in the [configuration](#configuration) section.
 
 <details>
 <summary>Show installation steps for Tor</summary>
 
-If you want to route your DNS queries through the Tor network, you will need to install the Tor proxy. Here are the steps to install and set up Tor on a Debian-based system:
-
-1. **Install Tor:**
+1.  **Install Tor:**
 
     ```bash
     sudo apt update
     sudo apt install tor
     ```
 
-2. **Start the Tor service:**
+2.  **Start the Tor service:**
 
     ```bash
     sudo systemctl start tor
     ```
 
-3. **Enable Tor to start on boot:**
+3.  **Enable Tor on boot:**
 
     ```bash
     sudo systemctl enable tor
     ```
 
-4. **Verify the Tor service:**
+4.  **Verify the Tor service is running:**
     ```bash
     sudo systemctl status tor
     ```
@@ -173,151 +171,148 @@ If you want to route your DNS queries through the Tor network, you will need to 
 
 ## Configuration
 
-You can configure Swiftdns to behave to your liking.
-To change a setting, simply open `/etc/swiftdns/config.toml` in a text editor (note that this requires root permissions).
-After saving your configuration file, run `systemctl restart swiftdns` to have the changes applied.
-
-### General Configuration
-
-| Key     | Default        | Value(s)                   | Description                         |
-| ------- | -------------- | -------------------------- | ----------------------------------- |
-| address | `127.0.0.1:53` | A socket address with port | The address to bind the listener to |
-
-### Resolver Configuration
-
-The `[resolver]` section defines which DNS-over-HTTPS provider Swiftdns will use:
+Below is an example of a fully annotated `/etc/swiftdns/config.toml`.
 
 ```toml
+# The address to listen on for DNS queries
+address = "127.0.0.1:53"
+
+# DNS-over-HTTPS (DoH) endpoint.
+# Swiftdns is standards-compliant and will work with any compliant DoH server.
 [resolver]
-# The DoH URL for DNS-over-HTTPS queries
-url = "https://1.1.1.1/dns-query"
+url = "https://cloudflare-dns.com/dns-query"
+bootstrap_ips = ["1.1.1.1:443"]
+# └─ Skip normal DNS for that hostname and dial these IPs directly
+#    (avoids circular lookups where Swiftdns would unsuccessfully try to query itself)
 
-# Optional: IP addresses to directly connect to (bypassing system DNS)
-# Used when the URL contains a domain name that needs to be resolved
-bootstrap_ips = []  # Example: ["45.90.28.0", "45.90.30.0"] for NextDNS
-```
-
-#### Example Configurations
-
-**Cloudflare (Default)**
-
-```toml
-[resolver]
-url = "https://1.1.1.1/dns-query"
-```
-
-**Cloudflare Family (Blocks malware and adult content)**
-
-```toml
-[resolver]
-url = "https://1.1.1.3/dns-query"
-```
-
-**NextDNS with Custom Profile ID**
-
-```toml
-[resolver]
-url = "https://dns.nextdns.io/abc123/dns-query"
-bootstrap_ips = ["45.90.28.0", "45.90.30.0"]
-```
-
-**Google DNS**
-
-```toml
-[resolver]
-url = "https://8.8.8.8/dns-query"
-```
-
-### Blocking Configuration
-
-The `[blocking]` section controls how Swiftdns responds to queries for blacklisted domains. For most users, the default `sinkhole` strategy is recommended, as it mimics Cloudflare's blocking behavior and prevents fallback resolvers from being used.
-
-You can change the blocking strategy by modifying the `strategy` field in the configuration file:
-
-```toml
+# Blocking strategy: sinkhole, nxdomain, refused, or drop
 [blocking]
-# How to respond to blocked domains
-# "sinkhole" - Return 0.0.0.0/:: for A/AAAA records, REFUSED for others (default)
-# "nxdomain" - Return NXDOMAIN for all blocked queries (domain doesn't exist)
-# "refused" - Return REFUSED for all blocked queries (warning: may trigger fallback resolvers)
-# "drop" - Drop packets without responding (causes timeout on client side)
 strategy = "sinkhole"
+
+# Tor proxy settings
+[tor]
+enabled = false
+address = "127.0.0.1:9050"
 ```
 
-#### Blocking Strategies Explained
+-   **bootstrap_ips**  
+    Optional list of IPs to use when your `resolver.url` is a hostname. Swiftdns skips your system resolver and connects directly. Note that they need to include the port, e.g., `"1.1.1.1:443"`.
 
-**`sinkhole` (default - recommended)**
+-   **strategy**  
+    one of `sinkhole`, `nxdomain`, `refused`, or `drop` (see "Show strategies" under [Blocking Strategies](#blocking-strategies) for details).
 
--   Returns `0.0.0.0` for A records and `::` for AAAA records
--   Returns REFUSED for other record types (MX, TXT, etc.)
--   Uses a 1-second TTL so you can change the blocking rules without waiting for cache expiration
--   Prevents clients from trying fallback DNS resolvers
--   Mimics Cloudflare's blocking behavior
-
-**`nxdomain`**
-
--   Returns RCODE 3 (NXDOMAIN) indicating the domain doesn't exist
--   No SOA record included, so responses are not cached (RFC 2308)
--   Good compatibility with most applications
--   Prevents fallback resolver usage
-
-**`refused`**
-
--   Returns RCODE 5 (REFUSED) for all blocked queries
--   Best when you need explicit block notifications
--   **Warning:** may trigger fallback DNS servers – disable any fallbacks to avoid privacy leaks
-
-**`drop` (not recommended for most users)**
-
--   Silently drops blocked queries without any response
--   Causes client timeouts (usually 5-30 seconds)
--   Hardest for applications to detect that blocking is occurring
--   Poor user experience due to long timeouts
-
-### Tor Configuration
-
-| Key         | Default          | Value(s)                | Description                              |
-| ----------- | ---------------- | ----------------------- | ---------------------------------------- |
-| tor.enabled | `false`          | bool                    | Whether to route DNS queries through tor |
-| tor.address | `127.0.0.1:9050` | A socket address w/port | The address your Tor proxy is using      |
+-   **tor.enabled** / **tor.address**  
+    Whether to route queries through Tor, and the SOCKS proxy to use.
 
 ## Commands
 
 ### Start
 
-Normally you would want to start it with `systemctl start swiftdns`,
-but you can start the listener in the foreground with the `start` subcommand (override the configured address with `--address <socketaddr>`).
+Normally you would want to start it with `systemctl start swiftdns`,  
+but you can run in the foreground with:
 
 ```bash
-$ swiftdns start
+swiftdns start [--address <socketaddr>]
 ```
-
----
 
 ### Resolve
 
-Resolve a domain in the terminal. These queries are not cached
+Resolve a domain in the terminal (not cached):
 
 ```bash
-$ swiftdns resolve <domain> [type: A] [--tor]
+swiftdns resolve <domain> [type: A] [--tor]
 ```
-
-**Flags**:
-
-`--tor`: Boolean flag to route the query through the Tor network.
-
----
 
 ### Check
 
-Test if a domain would be blocked by the current filters without actually sending a DNS query.
+Test if a domain would be blocked, without sending external queries:
 
 ```bash
-$ swiftdns check <domain>
+swiftdns check <domain>
 ```
 
-This command will output whether the domain is blocked or not, without sending any queries to the DNS provider.
-
----
-
 Of course, you can always run `swiftdns --help` to get more detailed documentation.
+
+## Blocking Strategies
+
+<details>
+<summary>Show strategies</summary>
+
+**`sinkhole`** (default - recommended)
+
+-   Returns `0.0.0.0` for A records and `::` for AAAA records
+-   Returns REFUSED for other types (MX, TXT, etc.)
+-   1s TTL for immediate whitelist changes
+-   Prevents fallback resolvers
+-   Mimics Cloudflare's blocking behavior
+
+**`nxdomain`**
+
+-   Returns RCODE 3 (NXDOMAIN)
+-   No SOA record (per RFC 2308), so most clients don't cache
+-   Prevents fallback resolvers
+
+**`refused`**
+
+-   Returns RCODE 5 (REFUSED)
+-   Most transparent; explicit "access denied"
+-   **Warning:** may trigger fallback DNS servers - make sure you have no other resolvers configured
+
+**`drop`** (not recommended)
+
+-   Silently drops queries (timeout)
+-   Hardest for applications trying to determine if a domain is blocked
+-   Can appear as packet loss; poor UX due to long waits
+
+</details>
+
+## Troubleshooting
+
+<details>
+<summary>Show troubleshooting steps</summary>
+
+1. **Check the service status:**
+
+    ```bash
+    sudo systemctl status swiftdns
+    ```
+
+2. Make sure your system's DNS resolver is set to `127.0.0.1:53`.
+
+    ```bash
+    cat /etc/resolv.conf
+    ```
+
+3. **Make sure Swiftdns is actually being used:**
+
+    Use `dig` or `nslookup` to test DNS resolution:
+
+    ```bash
+    dig example.com
+    ```
+
+    The output should show `;; SERVER: 127.0.0.1#53` (or your configured address) indicating that the query is being handled by Swiftdns.
+
+4. **Check the logs:**
+
+    ```bash
+    journalctl -u swiftdns -f
+    ```
+
+5. **If you have issues with blacklisting or whitelisting:**
+
+    Use the `check` command to verify if a domain is blocked or allowed:
+
+    ```bash
+    swiftdns check example.com
+    ```
+
+</details>
+
+## Further Reading
+
+If you're interested in the technical details of Swiftdns (DNS, DoH, and related protocols), here are some resources to get you started:
+
+-   [RFC 1035: _Domain names - implementation and specification_](https://datatracker.ietf.org/doc/html/rfc1035)
+-   [RFC 8484: _DNS Queries over HTTPS (DoH)_](https://datatracker.ietf.org/doc/html/rfc8484)
+-   [RFC 2308: _Negative Caching of DNS Queries (DNS NCACHE)_](https://datatracker.ietf.org/doc/html/rfc2308)
