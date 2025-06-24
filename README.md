@@ -4,10 +4,6 @@
 
 # Swiftdns
 
-Swiftdns is a local forwarding DNS resolver tailored for Debian distributions, built to enhance your privacy.
-
-## Project
-
 Swiftdns aims to improve your privacy and security by integrating DNS-over-HTTPS (DoH) into your existing DNS-over-UDP setup, so you don't have to touch complex system settings. Swiftdns listens on localhost via UDP like a standard resolver, then encrypts and forwards every query over HTTPS to your DoH server, ensuring end-to-end privacy and preventing eavesdropping. You can also define filter rules to block unwanted domains at the DNS level.
 
 For an extra layer of privacy, you can route all queries through a Tor proxy. This way, your DNS queries are anonymized even from your DoH provider.
