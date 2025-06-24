@@ -1,8 +1,13 @@
 use anyhow::Result;
 use hickory_proto::{
-    op::{Message, MessageType, ResponseCode},
-    rr::{RData, Record, RecordType},
+    op::Message,
     serialize::binary::{BinDecodable as _, BinEncodable as _},
+};
+
+#[cfg(debug_assertions)]
+use hickory_proto::{
+    op::{MessageType, ResponseCode},
+    rr::{RData, Record, RecordType},
 };
 
 use crate::{config::SwiftConfig, error::DnsError, http};
@@ -12,6 +17,7 @@ pub async fn resolve(
     config: &SwiftConfig,
     message: &Message,
 ) -> Result<Message, DnsError> {
+    #[cfg(debug_assertions)]
     if std::env::var("SWIFTDNS_CLI_TEST_MODE").is_ok() {
         return simulate_dns_response(message);
     }
@@ -42,6 +48,7 @@ pub async fn resolve(
 /// Simulates a DNS response for testing purposes.
 ///
 /// We use this in our cli tests to avoid making real network requests.
+#[cfg(debug_assertions)]
 fn simulate_dns_response(message: &Message) -> Result<Message, DnsError> {
     let mut response = message.clone();
 
