@@ -22,6 +22,11 @@ use crate::{
     upstream,
 };
 
+enum MessageResult {
+    Response(Message),
+    Drop,
+}
+
 struct BurstTracker {
     registry: HashMap<String, Instant>,
     burst_duration_secs: Duration,
@@ -60,7 +65,7 @@ async fn handle_message(
     filter: &DnsFilter,
     cache: &mut Cache,
     burst_tracker: &mut BurstTracker,
-) -> Result<Message, DnsError> {
+) -> Result<MessageResult, DnsError> {
     // RFC 1035 allows multiple queries per message for forward compatibility.
     // This feature is not implemented or used in practice
     // and poses security risks (DNS amplification).
@@ -68,7 +73,7 @@ async fn handle_message(
     if message.queries().len() != 1 {
         let mut response = create_response_base(message);
         response.set_response_code(ResponseCode::FormErr);
-        return Ok(response);
+        return Ok(MessageResult::Response(response));
     }
 
     let query = message.queries().first().unwrap();
@@ -77,7 +82,7 @@ async fn handle_message(
         Err(_) => {
             let mut response = create_response_base(message);
             response.set_response_code(ResponseCode::FormErr);
-            return Ok(response);
+            return Ok(MessageResult::Response(response));
         }
     };
 
@@ -92,9 +97,9 @@ async fn handle_message(
         }
 
         match blocking::create_blocked_response(message, query.query_type(), &config.blocking) {
-            Some(response) => return Ok(response),
+            Some(response) => return Ok(MessageResult::Response(response)),
             None => {
-                return Err(DnsError::Dropped);
+                return Ok(MessageResult::Drop);
             }
         }
     }
@@ -119,7 +124,7 @@ async fn handle_message(
     response.add_name_servers(upstream_response.name_servers().to_vec());
     response.add_additionals(upstream_response.additionals().to_vec());
 
-    Ok(response)
+    Ok(MessageResult::Response(response))
 }
 
 pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
@@ -170,10 +175,10 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
             )
             .await
             {
-                Ok(response) => {
+                Ok(MessageResult::Response(response)) => {
                     socket.send_to(&response.to_bytes()?, src)?;
                 }
-                Err(DnsError::Dropped) => {
+                Ok(MessageResult::Drop) => {
                     // Drop strategy - no response sent (this is intentional)
                 }
                 Err(why) => {
