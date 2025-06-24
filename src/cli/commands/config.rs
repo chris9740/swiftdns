@@ -7,7 +7,7 @@ use tabwriter::TabWriter;
 use crate::config::{get_config_path, SwiftConfig, CONFIG_FILE_NAME};
 
 pub async fn execute(config: &SwiftConfig) -> Result<()> {
-    println!("{}", "Swiftdns Status".bold());
+    println!("{}", "Swiftdns".bold());
     println!(
         " {}: {} ({})",
         "Version".cyan(),

@@ -8,15 +8,18 @@ fn test_command() -> Command {
 }
 
 #[test]
-fn test_status_command() {
+fn test_config_command() {
     let mut cmd = test_command();
-    let assert = cmd.arg("status").assert();
+    let assert = cmd.arg("config").assert();
 
     assert
         .success()
-        .stdout(predicate::str::contains("Swiftdns Status"))
+        .stdout(predicate::str::contains("Swiftdns"))
         .stdout(predicate::str::contains("Version:"))
-        .stdout(predicate::str::contains(crate_version!()));
+        .stdout(predicate::str::contains(crate_version!()))
+        .stdout(predicate::str::contains(env!("GIT_COMMIT_HASH")))
+        .stdout(predicate::str::contains("Configuration:"))
+        .stdout(predicate::str::contains("Config path:"));
 }
 
 #[test]
