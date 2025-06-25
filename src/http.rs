@@ -32,9 +32,15 @@ impl Client {
             .with_root_certificates(root_store)
             .with_no_client_auth();
 
+        let timeout = if config.tor.enabled {
+            std::time::Duration::from_secs(10)
+        } else {
+            std::time::Duration::from_secs(3)
+        };
+
         let mut client_builder = reqwest::Client::builder()
             .use_preconfigured_tls(tls_config)
-            .timeout(std::time::Duration::from_secs(10))
+            .timeout(timeout)
             .connect_timeout(std::time::Duration::from_secs(5));
 
         if let Some(bootstrap_ips) = &config.resolver.bootstrap_ips {

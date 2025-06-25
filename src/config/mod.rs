@@ -131,21 +131,24 @@ impl TorConfig {
     }
 }
 
-pub fn get_config() -> Result<SwiftConfig, ConfigError> {
-    let config_path = get_config_path().join(CONFIG_FILE_NAME);
-
-    if !config_path.exists() {
-        create_default_config(&config_path)?;
+pub fn get_config_from_path(path: PathBuf) -> Result<SwiftConfig, ConfigError> {
+    if !path.exists() {
+        create_default_config(&path)?;
     }
 
-    let config_str = std::fs::read_to_string(&config_path)
-        .map_err(|e| ConfigError::IoError(config_path.clone(), e))?;
+    let config_str =
+        std::fs::read_to_string(&path).map_err(|e| ConfigError::IoError(path.clone(), e))?;
 
-    let config: SwiftConfig = toml::from_str(&config_str)
-        .map_err(|e| ConfigError::DeserializeError(config_path.clone(), e))?;
+    let config: SwiftConfig =
+        toml::from_str(&config_str).map_err(|e| ConfigError::DeserializeError(path.clone(), e))?;
 
     config.validate()?;
     Ok(config)
+}
+
+pub fn get_config() -> Result<SwiftConfig, ConfigError> {
+    let config_path = get_config_path().join(CONFIG_FILE_NAME);
+    get_config_from_path(config_path)
 }
 
 pub fn get_config_path() -> PathBuf {
