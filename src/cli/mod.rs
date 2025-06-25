@@ -3,7 +3,7 @@ pub mod commands;
 use anyhow::Result;
 use clap::{crate_description, crate_version, Parser, Subcommand};
 
-use crate::config::get_config;
+use crate::config::{get_config, get_config_from_path};
 
 #[derive(Parser)]
 #[command(
@@ -12,6 +12,8 @@ use crate::config::get_config;
     arg_required_else_help = true
 )]
 pub struct Cli {
+    #[arg(long, global = true, help = "Path to configuration file")]
+    config: Option<String>,
     #[command(subcommand)]
     command: Commands,
 }
@@ -30,7 +32,12 @@ pub enum Commands {
 
 pub async fn start() -> Result<()> {
     let args = Cli::parse();
-    let config = get_config()?;
+
+    let config = if let Some(config_path) = args.config {
+        get_config_from_path(config_path.into())?
+    } else {
+        get_config()?
+    };
 
     match args.command {
         Commands::Check(args) => commands::check::execute(args).await,

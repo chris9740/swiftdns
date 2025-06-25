@@ -4,22 +4,19 @@
 
 # Swiftdns
 
-Swiftdns aims to improve your privacy and security by integrating DNS-over-HTTPS (DoH) into your existing DNS-over-UDP setup, so you don't have to touch complex system settings. Swiftdns listens on localhost via UDP like a standard resolver, then encrypts and forwards every query over HTTPS to your DoH server, ensuring end-to-end privacy and preventing eavesdropping. You can also define filter rules to block unwanted domains at the DNS level.
+Swiftdns tunnels your normal DNS-over-UDP queries over HTTPS for end-to-end privacy.
+
+It is specifically designed for power users, hobbyists, and privacy-conscious individuals. It's tailored for Debian-based systems, but can be built for other Linux distributions as well.
+
+## Project Overview
+
+Swiftdns listens on localhost via UDP like a standard resolver, then encrypts and forwards every query over HTTPS to your DoH server, ensuring end-to-end privacy and preventing eavesdropping. You can also define filter rules to block unwanted domains at the DNS level.
 
 For an extra layer of privacy, you can route all queries through a Tor proxy. This way, your DNS queries are anonymized even from your DoH provider.
 
-## Installing
+## Installation
 
-### Prerequisites
-
--   systemd
--   Rust toolchain (for compilation)
--   `cargo-deb` (for creating .deb packages)
--   `sccache`, `mold`, `clang` (for building the project)
-
-### Installation Steps
-
-1. **Install Rust, cargo-deb, sccache, and other dependencies:**
+1. **Install dependencies:**
 
     ```bash
     # Install Rust
