@@ -14,12 +14,12 @@ Test Tags           tor
 # We will need to implement a more robust test that checks the actual Tor routing.
 Test DNS Resolution Through Tor
     [Documentation]    Test DNS resolution through Tor
-    [Timeout]    30s
+    [Timeout]    45s
 
     Verify Tor Connection
-    Start Swiftdns    tor_enabled=true
+    Start Swiftdns    tor_enabled=true    timeout=20
 
-    Expect Answer    example.com    A    timeout=5
+    Expect Answer    example.com    A    timeout=10
 
 
 *** Keywords ***
