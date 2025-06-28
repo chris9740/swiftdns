@@ -9,13 +9,10 @@ Library             String
 
 
 *** Variables ***
-${BINARY_PATH}          ${CURDIR}/../../target/debug/swiftdns
-${CONFIG_PATH}          ${CURDIR}/test-config.toml
-${FILTER_DIR}           ${CURDIR}/../../assets/filters
-${PORT}                 55353
-${DNS_TIMEOUT}          3s
-${TOR_TIMEOUT}          15s
-${MOCK_PROXY_PORT}      19050
+${BINARY_PATH}      ${CURDIR}/../../target/debug/swiftdns
+${CONFIG_PATH}      ${CURDIR}/test-config.toml
+${FILTER_DIR}       ${CURDIR}/../../assets/filters
+${PORT}             55353
 
 
 *** Keywords ***
@@ -55,7 +52,7 @@ Start Swiftdns
     [Documentation]    Start the Swiftdns proxy with configurable options
     [Arguments]    ${strategy}=sinkhole
     ...    ${tor_enabled}=false
-    ...    ${wait_timeout}=5
+    ...    ${timeout}=5
 
     Create Basic Config
     ...    strategy=${strategy}
@@ -74,7 +71,7 @@ Start Swiftdns
     ...    stderr=STDOUT
     ...    alias=swiftdns
 
-    Wait For Swiftdns UDP    timeout=${wait_timeout}
+    Wait For Swiftdns UDP    timeout=${timeout}
 
 Stop Swiftdns
     [Documentation]    Stop the Swiftdns proxy and clean up
