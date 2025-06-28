@@ -58,3 +58,82 @@ pub fn create_response_base(message: &Message) -> Message {
 
     response
 }
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr as _;
+
+    use super::*;
+    use hickory_proto::op::{Message, Query};
+    use hickory_proto::rr::{Name, RecordType};
+
+    fn create_test_message(domain: &str, record_type: RecordType) -> Message {
+        let mut message = Message::new();
+        let query = Query::query(Name::from_str(domain).unwrap(), record_type);
+        message.add_query(query);
+        message
+    }
+
+    #[test]
+    fn test_sinkhole_responses() {
+        let config = BlockConfig {
+            strategy: BlockStrategy::Sinkhole,
+        };
+        let message = create_test_message("blocked.com", RecordType::A);
+
+        // Test A record response
+        let response = create_blocked_response(&message, RecordType::A, &config).unwrap();
+        assert_eq!(response.response_code(), ResponseCode::NoError);
+
+        let answer = response.answers().first().unwrap();
+        assert!(matches!(answer.data(), RData::A(ip) if ip.to_string() == "0.0.0.0"));
+
+        // Test AAAA record response
+        let response = create_blocked_response(&message, RecordType::AAAA, &config).unwrap();
+        assert_eq!(response.response_code(), ResponseCode::NoError);
+
+        let answer = response.answers().first().unwrap();
+        assert!(matches!(answer.data(), RData::AAAA(ip) if ip.to_string() == "::"));
+
+        // Test other record types
+        let response = create_blocked_response(&message, RecordType::CNAME, &config).unwrap();
+        assert_eq!(response.response_code(), ResponseCode::Refused);
+    }
+
+    #[test]
+    fn test_nx_domain_response() {
+        let config = BlockConfig {
+            strategy: BlockStrategy::NxDomain,
+        };
+        let message = create_test_message("blocked.com", RecordType::A);
+
+        let response = create_blocked_response(&message, RecordType::A, &config);
+
+        assert!(response.is_some());
+        assert_eq!(response.unwrap().response_code(), ResponseCode::NXDomain);
+    }
+
+    #[test]
+    fn test_refused_response() {
+        let config = BlockConfig {
+            strategy: BlockStrategy::Refused,
+        };
+        let message = create_test_message("blocked.com", RecordType::A);
+
+        let response = create_blocked_response(&message, RecordType::A, &config);
+
+        assert!(response.is_some());
+        assert_eq!(response.unwrap().response_code(), ResponseCode::Refused);
+    }
+
+    #[test]
+    fn test_drop_strategy_returns_none() {
+        let config = BlockConfig {
+            strategy: BlockStrategy::Drop,
+        };
+        let message = create_test_message("blocked.com", RecordType::A);
+
+        let response = create_blocked_response(&message, RecordType::A, &config);
+        assert!(response.is_none());
+    }
+}
