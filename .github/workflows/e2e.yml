@@ -2,21 +2,18 @@ name: E2E Testing
 
 on:
     push:
-        branches: [master]
-
-    release:
-        types: [published]
-
-    workflow_dispatch:
-
+        branches: [master, revision, e2e]
     pull_request:
-        branches: [master]
+        branches: [master, revision, e2e]
         paths:
             - "src/**"
             - "Cargo.toml"
             - "Cargo.lock"
             - "tests/e2e/**"
 
+    release:
+        types: [published]
+    workflow_dispatch:
 jobs:
     e2e:
         runs-on: ubuntu-latest
