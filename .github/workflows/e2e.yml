@@ -2,7 +2,7 @@ name: E2E Testing
 
 on:
     push:
-        branches: [master, revision, e2e]
+        branches: [master]
     pull_request:
         branches: [master, revision, e2e]
         paths:
