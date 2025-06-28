@@ -1,4 +1,4 @@
-.PHONY: package test release
+.PHONY: package test e2e-test release
 
 package:
 	cargo deb
@@ -8,7 +8,7 @@ test: package
 	docker run --rm swiftdns:test
 
 e2e-test:
-	robot -d tests/robot/output tests/robot
+	robot -d tests/robot/results tests/robot
 
 release: test
 	@echo "✓ Release package tested and ready!"

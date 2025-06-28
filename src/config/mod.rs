@@ -179,3 +179,21 @@ pub fn create_default_config(path: &Path) -> Result<(), ConfigError> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config_validation() {
+        let config = SwiftConfig::default();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_invalid_resolver_url() {
+        let mut config = SwiftConfig::default();
+        config.resolver.url = "not-a-url".to_string();
+        assert!(config.validate().is_err());
+    }
+}
