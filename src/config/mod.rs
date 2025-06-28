@@ -24,6 +24,9 @@ pub struct SwiftConfig {
     pub resolver: ResolverConfig,
     pub tor: TorConfig,
     pub blocking: BlockConfig,
+
+    #[serde(skip)]
+    pub config_path: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -72,6 +75,7 @@ impl Default for SwiftConfig {
             blocking: BlockConfig {
                 strategy: BlockStrategy::default(),
             },
+            config_path: None,
         }
     }
 }
@@ -139,10 +143,12 @@ pub fn get_config_from_path(path: PathBuf) -> Result<SwiftConfig, ConfigError> {
     let config_str =
         std::fs::read_to_string(&path).map_err(|e| ConfigError::IoError(path.clone(), e))?;
 
-    let config: SwiftConfig =
+    let mut config: SwiftConfig =
         toml::from_str(&config_str).map_err(|e| ConfigError::DeserializeError(path.clone(), e))?;
 
     config.validate()?;
+    config.config_path = Some(path);
+
     Ok(config)
 }
 

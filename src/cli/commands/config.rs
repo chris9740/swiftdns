@@ -19,12 +19,24 @@ pub async fn execute(config: &SwiftConfig) -> Result<()> {
     let mut tw = TabWriter::new(vec![]);
 
     writeln!(tw, "{}", "Configuration:".bold())?;
-    writeln!(
-        tw,
-        "  {}:\t{}",
-        "Config path".cyan(),
-        get_config_path().join(CONFIG_FILE_NAME).display()
-    )?;
+
+    let config_path = config
+        .config_path
+        .as_ref()
+        .map(|p| {
+            p.canonicalize()
+                .unwrap_or_else(|_| p.to_path_buf())
+                .display()
+                .to_string()
+        })
+        .unwrap_or_else(|| {
+            get_config_path()
+                .join(CONFIG_FILE_NAME)
+                .display()
+                .to_string()
+        });
+
+    writeln!(tw, "  {}:\t{}", "Config path".cyan(), config_path)?;
 
     writeln!(tw, "  {}:\t{}", "Listening address".cyan(), config.address)?;
 
