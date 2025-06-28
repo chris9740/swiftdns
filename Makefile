@@ -8,7 +8,7 @@ test: package
 	docker run --rm swiftdns:test
 
 e2e-test:
-	robot -d tests/e2e/output tests/e2e
+	robot -d tests/robot/output tests/robot
 
 release: test
 	@echo "✓ Release package tested and ready!"
