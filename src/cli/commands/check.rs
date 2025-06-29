@@ -1,7 +1,7 @@
 use anyhow::Result;
 use colored::Colorize;
 
-use crate::filter::{DnsFilter, FilterResult};
+use crate::filter::{DnsFilter, FilterPattern, FilterResult};
 
 pub use super::resolve::ResolveArgs as CheckArgs;
 
@@ -12,19 +12,33 @@ pub async fn execute(args: CheckArgs) -> Result<()> {
         DnsFilter::from_default_path().await?
     };
 
-    if let FilterResult::Block(rule) = filter.check_domain(&args.domain.name()).await {
-        println!(
-            "{} is blacklisted {}",
-            args.domain.name().red(),
-            format!(
-                "(matched with `{}`, found in `{}`)",
-                rule.original_pattern().yellow(),
-                rule.path().green()
-            )
-            .bright_black()
-        );
-    } else {
-        println!("{} is not blacklisted", args.domain.name().green());
+    let format_rule_info = |rule: &FilterPattern| {
+        format!(
+            "(matched with `{}`, found in `{}`)",
+            rule.original_pattern().yellow(),
+            rule.path().green()
+        )
+        .bright_black()
+    };
+
+    match filter.check_domain(&args.domain.name()).await {
+        FilterResult::Block(rule) => {
+            println!(
+                "{} is blacklisted {}",
+                args.domain.name().red(),
+                format_rule_info(&rule)
+            );
+        }
+        FilterResult::Whitelisted(rule) => {
+            println!(
+                "{} is whitelisted {}",
+                args.domain.name().blue(),
+                format_rule_info(&rule)
+            );
+        }
+        FilterResult::Allow => {
+            println!("{} is not blacklisted", args.domain.name().green());
+        }
     }
 
     Ok(())
