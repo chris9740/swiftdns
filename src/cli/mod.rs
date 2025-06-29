@@ -12,8 +12,14 @@ use crate::config::{get_config, get_config_from_path};
     arg_required_else_help = true
 )]
 pub struct Cli {
-    #[arg(long, global = true, help = "Path to configuration file")]
-    config: Option<String>,
+    #[arg(
+        long,
+        short = 'c',
+        value_name = "FILE",
+        global = true,
+        help = "Path to the configuration file"
+    )]
+    config_file: Option<String>,
     #[command(subcommand)]
     command: Commands,
 }
@@ -33,7 +39,7 @@ pub enum Commands {
 pub async fn start() -> Result<()> {
     let args = Cli::parse();
 
-    let config = if let Some(config_path) = args.config {
+    let config = if let Some(config_path) = args.config_file {
         get_config_from_path(config_path.into())?
     } else {
         get_config()?

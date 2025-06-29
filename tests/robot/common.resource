@@ -64,7 +64,7 @@ Start Swiftdns
     Start Process
     ...    ${BINARY_PATH}
     ...    start
-    ...    --config
+    ...    --config-file
     ...    ${CONFIG_PATH}
     ...    --address
     ...    127.0.0.1:${PORT}
