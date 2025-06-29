@@ -28,9 +28,9 @@ pub struct Cli {
 pub enum Commands {
     #[command(about = "Test if a domain would be blocked by the blacklist")]
     Check(commands::check::CheckArgs),
-    #[command(about = "Display configuration")]
+    #[command(about = "Show configuration")]
     Config,
-    #[command(about = "Start the DNS listener")]
+    #[command(about = "Start the DNS server")]
     Start(commands::start::StartArgs),
     #[command(about = "Resolve a domain name")]
     Resolve(commands::resolve::ResolveArgs),

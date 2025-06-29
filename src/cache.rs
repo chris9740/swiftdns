@@ -19,7 +19,7 @@ struct CacheEntry {
     pub expires_at: Instant,
 }
 
-const FIVE_MINUTES: u32 = 300;
+const DEFAULT_TTL_SECONDS: u32 = 300;
 
 impl Cache {
     pub fn new(capacity: usize) -> Self {
@@ -63,7 +63,7 @@ impl Cache {
             .iter()
             .map(|record| record.ttl())
             .min()
-            .unwrap_or(FIVE_MINUTES);
+            .unwrap_or(DEFAULT_TTL_SECONDS);
 
         if ttl == 0 {
             return;
@@ -71,7 +71,7 @@ impl Cache {
 
         let expires_at: Instant = now
             .checked_add(Duration::from_secs(ttl as u64))
-            .unwrap_or_else(|| now + Duration::from_secs(FIVE_MINUTES as u64));
+            .unwrap_or_else(|| now + Duration::from_secs(DEFAULT_TTL_SECONDS as u64));
 
         let key = (name.clone(), record_type);
         let entry = CacheEntry {
