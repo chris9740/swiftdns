@@ -24,5 +24,3 @@ Should Handle Non-Existent Domain
 
     Start Swiftdns
     Query Domain    nonexistent.invalid    A    NXDOMAIN
-
-# Should Cache DNS Responses

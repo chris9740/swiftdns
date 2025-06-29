@@ -30,3 +30,8 @@ Dynamic Filter Reload
     Remove File    ${FILTER_DIR}/test-temp.list
     Sleep    1s
     Expect Answer    reddit.com    A
+
+[Teardown]
+    [Documentation]    Clean up after dynamic filter test
+
+    Remove File    ${FILTER_DIR}/test-temp.list
