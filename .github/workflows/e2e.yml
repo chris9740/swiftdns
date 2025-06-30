@@ -36,7 +36,6 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install Rust
-              if: env.ACT != 'true'
               uses: actions-rs/toolchain@v1
               with:
                   toolchain: stable
@@ -44,13 +43,11 @@ jobs:
                   override: true
 
             - name: Install system dependencies
-              if: env.ACT != 'true'
               run: |
                   sudo apt-get update
                   sudo apt-get install -y clang mold tor dnsutils
 
             - name: Install Robot Framework
-              if: env.ACT != 'true'
               run: |
                   pip install robotframework
 
@@ -68,7 +65,7 @@ jobs:
 
             - name: Upload test results
               uses: actions/upload-artifact@v4
-              if: always() && env.ACT != 'true'
+              if: always()
               with:
                   name: robot-results
                   path: tests/robot/results/
