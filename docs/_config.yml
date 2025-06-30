@@ -1,0 +1,15 @@
+title: Swiftdns Documentation
+description: Privacy-focused DNS-over-HTTPS proxy
+theme: minima
+markdown: kramdown
+highlighter: rouge
+
+plugins:
+    - jekyll-feed
+    - jekyll-sitemap
+
+navigation:
+    - title: Home
+      url: /
+    - title: Installation
+      url: /installation
