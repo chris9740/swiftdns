@@ -4,7 +4,7 @@ address = "127.0.0.1:5053"
 
 [resolver]
 url = "https://cloudflare-dns.com/dns-query"
-bootstrap_ips = ["1.1.1.1:443"]
+bootstrap_ips = ["1.1.1.1:443", "1.0.0.1:443"]
 
 [tor]
 enabled = false
