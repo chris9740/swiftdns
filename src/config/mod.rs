@@ -65,8 +65,11 @@ impl Default for SwiftConfig {
         Self {
             address: "127.0.0.1:53".parse().unwrap(),
             resolver: ResolverConfig {
-                url: "https://1.1.1.1/dns-query".to_string(),
-                bootstrap_ips: None,
+                url: "https://cloudflare-dns.com/dns-query".to_string(),
+                bootstrap_ips: Some(vec![
+                    "1.1.1.1:443".parse().unwrap(),
+                    "1.0.0.1:443".parse().unwrap(),
+                ]),
             },
             tor: TorConfig {
                 enabled: false,
@@ -173,8 +176,8 @@ pub fn get_filters_path() -> PathBuf {
 
 pub fn create_default_config(path: &Path) -> Result<(), ConfigError> {
     let config = SwiftConfig::default();
-    let toml_string = toml::to_string_pretty(&config)
-        .map_err(|e| ConfigError::SerializeError(path.to_path_buf(), e))?;
+    let toml_string =
+        toml::to_string(&config).map_err(|e| ConfigError::SerializeError(path.to_path_buf(), e))?;
 
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
