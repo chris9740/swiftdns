@@ -1,15 +1,25 @@
-title: Swiftdns Documentation
-description: Privacy-focused DNS-over-HTTPS proxy
-theme: minima
-markdown: kramdown
-highlighter: rouge
+theme: null
+remote_theme: pmarsceill/just-the-docs
+color_scheme: "dark"
 
 plugins:
     - jekyll-feed
-    - jekyll-sitemap
 
-navigation:
-    - title: Home
-      url: /
-    - title: Installation
-      url: /installation
+title: "Swiftdns Documentation"
+logo: logo.png
+repository: chris9740/swiftdns
+
+just_the_docs:
+    homepage: index.md
+    nav_order:
+        - Home
+        - Installation
+        - Configuration
+        - Filtering
+        - Troubleshooting
+    logo:
+        src: logo.png
+        alt: "Swiftdns logo"
+    show_edit_link: true
+    edit_link_text: "Edit this page on GitHub"
+    search_enabled: true
