@@ -44,16 +44,14 @@ impl Client {
             .connect_timeout(std::time::Duration::from_secs(5));
 
         if let Some(bootstrap_ips) = &config.resolver.bootstrap_ips {
-            for ip in bootstrap_ips {
-                let url = url::Url::parse(&config.resolver.url)
-                    .context("Failed to parse resolver URL")?;
+            let url =
+                url::Url::parse(&config.resolver.url).context("Failed to parse resolver URL")?;
 
-                client_builder = client_builder.resolve_to_addrs(
-                    url.host_str()
-                        .context("Failed to get host from resolver URL")?,
-                    &[*ip],
-                );
-            }
+            client_builder = client_builder.resolve_to_addrs(
+                url.host_str()
+                    .context("Failed to get host from resolver URL")?,
+                bootstrap_ips,
+            );
         }
 
         if config.tor.enabled {
