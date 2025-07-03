@@ -24,6 +24,7 @@ pub struct SwiftConfig {
     pub resolver: ResolverConfig,
     pub tor: TorConfig,
     pub blocking: BlockConfig,
+    pub hosts: HostsConfig,
 
     #[serde(skip)]
     pub config_path: Option<PathBuf>,
@@ -60,6 +61,11 @@ pub enum BlockStrategy {
     Drop,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HostsConfig {
+    pub enabled: bool,
+}
+
 impl Default for SwiftConfig {
     fn default() -> Self {
         Self {
@@ -78,6 +84,7 @@ impl Default for SwiftConfig {
             blocking: BlockConfig {
                 strategy: BlockStrategy::default(),
             },
+            hosts: HostsConfig { enabled: false },
             config_path: None,
         }
     }

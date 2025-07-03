@@ -8,6 +8,7 @@ use std::{
 use anyhow::Result;
 use hickory_proto::{
     op::{Message, ResponseCode},
+    rr::{rdata, RData, Record, RecordType},
     serialize::binary::{BinDecodable, BinEncodable},
 };
 
@@ -18,6 +19,7 @@ use crate::{
     domain::DnsName,
     error::DnsError,
     filter::{DnsFilter, FilterResult},
+    hosts,
     http::Client,
     upstream,
 };
@@ -65,6 +67,7 @@ async fn handle_message(
     filter: &DnsFilter,
     cache: &mut Cache,
     burst_tracker: &mut BurstTracker,
+    hosts: &HashMap<DnsName, Vec<IpAddr>>,
 ) -> Result<MessageResult, DnsError> {
     // RFC 1035 allows multiple queries per message for forward compatibility.
     // This feature is not implemented or used in practice
@@ -85,6 +88,52 @@ async fn handle_message(
             return Ok(MessageResult::Response(response));
         }
     };
+
+    if config.hosts.enabled && hosts.contains_key(&domain) {
+        let ips = hosts.get(&domain).expect("Hosts should contain the domain");
+        let mut response = create_response_base(message);
+        response.set_response_code(ResponseCode::NoError);
+
+        match query.query_type() {
+            RecordType::A => {
+                for ip in ips {
+                    if let IpAddr::V4(v4) = ip {
+                        let record =
+                            Record::from_rdata(query.name().clone(), 300, RData::A(rdata::A(*v4)));
+                        response.add_answer(record);
+                    }
+                }
+            }
+            RecordType::AAAA => {
+                for ip in ips {
+                    if let IpAddr::V6(v6) = ip {
+                        let record = Record::from_rdata(
+                            query.name().clone(),
+                            300,
+                            RData::AAAA(rdata::AAAA(*v6)),
+                        );
+                        response.add_answer(record);
+                    }
+                }
+            }
+            RecordType::ANY => {
+                for ip in ips {
+                    let rdata = match ip {
+                        IpAddr::V4(v4) => RData::A(rdata::A(*v4)),
+                        IpAddr::V6(v6) => RData::AAAA(rdata::AAAA(*v6)),
+                    };
+                    let record = Record::from_rdata(query.name().clone(), 300, rdata);
+                    response.add_answer(record);
+                }
+            }
+            _ => {
+                // Domain exists in hosts but query type is unsupported
+                // Since /etc/hosts is authoritative, we return NODATA
+            }
+        }
+
+        return Ok(MessageResult::Response(response));
+    }
 
     if let FilterResult::Block(rule) = filter.check_domain(&domain.name()).await {
         if !burst_tracker.is_bursting(&domain.name()) {
@@ -139,6 +188,7 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
     let client = Client::connect(config).await?;
     let mut cache = Cache::new(1000);
     let mut burst_tracker = BurstTracker::new();
+    let hosts = hosts::parse_hosts_file()?;
 
     let socket = match UdpSocket::bind(addr) {
         Ok(socket) => socket,
@@ -172,6 +222,7 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
                 &filter,
                 &mut cache,
                 &mut burst_tracker,
+                &hosts,
             )
             .await
             {

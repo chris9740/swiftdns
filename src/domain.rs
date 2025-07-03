@@ -1,6 +1,6 @@
 use std::{fmt::Display, str::FromStr};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DnsName {
     Domain(Domain),    // Regular domains with validation
     Authority(String), // Authority names (less strict)
@@ -62,7 +62,7 @@ impl DnsName {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Domain(String);
 
 #[derive(Debug, PartialEq)]

@@ -12,3 +12,6 @@ address = "127.0.0.1:9050"
 
 [blocking]
 strategy = "sinkhole"
+
+[hosts]
+enabled = false

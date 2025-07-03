@@ -29,6 +29,8 @@ Create Basic Config
     ...    strategy = "${strategy}"
     ...    [tor]
     ...    enabled = ${tor_enabled}
+    ...    [hosts]
+    ...    enabled = false
 
     Create File    ${CONFIG_PATH}    ${config_content}
 
