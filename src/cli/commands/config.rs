@@ -66,6 +66,13 @@ pub async fn execute(config: &SwiftConfig) -> Result<()> {
         writeln!(tw, "   - {}:\t{}", "Bootstrap IPs".cyan(), ips)?;
     }
 
+    writeln!(
+        tw,
+        "   - {}:\t{:?}",
+        "Blocking Strategy".cyan(),
+        config.blocking.strategy
+    )?;
+
     tw.flush()?;
     let formatted_output = String::from_utf8(tw.into_inner()?)?;
     print!("{}", formatted_output);
