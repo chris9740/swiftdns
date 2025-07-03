@@ -184,7 +184,7 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
                 Err(why) => {
                     eprintln!("Error resolving query: {}", why);
                     let mut error_response = create_response_base(&message);
-                    error_response.set_response_code(why.response_code());
+                    error_response.set_response_code(ResponseCode::ServFail);
                     socket.send_to(&error_response.to_bytes()?, src)?;
                 }
             }
