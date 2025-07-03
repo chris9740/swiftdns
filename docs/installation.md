@@ -15,10 +15,10 @@ Follow these steps to build and install Swiftdns on your system.
     # Install Rust
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
     source $HOME/.cargo/env
+    # Install system dependencies
+    sudo apt install mold clang libssl-dev
     # Install cargo tools
     cargo install cargo-deb sccache
-    # Install system dependencies
-    sudo apt install mold clang
     ```
 
 2. Clone Repository

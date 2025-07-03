@@ -13,8 +13,8 @@ Swiftdns tunnels your DNS-over-UDP queries over HTTPS for end-to-end privacy. De
     ```bash
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
     source $HOME/.cargo/env
+    sudo apt install mold clang libssl-dev
     cargo install cargo-deb sccache
-    sudo apt install mold clang
     ```
 
 2. **Build and install:**
