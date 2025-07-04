@@ -98,7 +98,7 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
     };
 
     if let FilterResult::Block(entry) = filter.check_domain(&args.domain.name()).await {
-        eprintln!(
+        println!(
             "Query for {} refused (pattern `{}`, path `{}`)",
             args.domain.name(),
             entry.original_pattern().yellow(),

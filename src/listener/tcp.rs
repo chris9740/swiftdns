@@ -16,18 +16,17 @@ use crate::{
 
 pub async fn start_tcp(addr: &SocketAddr, ctx: Arc<DnsContext>) -> Result<()> {
     let listener = TcpListener::bind(addr).await?;
-    println!("Listening on {addr} (TCP)");
 
     loop {
         let (mut stream, peer) = listener.accept().await?;
         if !is_local_ip(&peer.ip()) {
-            eprintln!("non-local TCP from {peer}");
+            tracing::warn!(peer=%peer, "Received non-local TCP query");
             continue;
         }
         let ctx = ctx.clone();
         tokio::spawn(async move {
             if let Err(e) = handle_tcp(&mut stream, ctx).await {
-                eprintln!("TCP handler error: {}", e);
+                tracing::error!(error=?e, "TCP handler error");
             }
         });
     }

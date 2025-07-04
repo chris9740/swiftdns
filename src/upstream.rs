@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use anyhow::Result;
 use hickory_proto::{
     op::Message,
@@ -22,6 +24,8 @@ pub async fn resolve(
         return simulate_dns_response(message);
     }
 
+    let start = Instant::now();
+
     let request = client
         .post(&config.resolver.url)
         .header(reqwest::header::CONTENT_TYPE, "application/dns-message")
@@ -36,6 +40,14 @@ pub async fn resolve(
     if response.status() == reqwest::StatusCode::BAD_REQUEST {
         return Err(DnsError::QueryError("Bad request".to_string()));
     }
+
+    let elapsed = start.elapsed();
+
+    tracing::debug!(
+        elapsed_ms = elapsed.as_millis(),
+        remote_addr = ?response.remote_addr(),
+        "Upstream DNS query finished",
+    );
 
     let response_bytes = response
         .bytes()

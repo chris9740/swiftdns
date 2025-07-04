@@ -43,8 +43,8 @@ thiserror = "2.0.12"
 tokio-rustls = "0.24"
 rustls-native-certs = "0.6"
 url = "2.5.4"
-tracing = { version = "0.1.41", optional = true }
-tracing-subscriber = { version = "0.3.19", optional = true }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 notify = { version = "8.0.0", optional = true }
 
 [dev-dependencies]
@@ -54,7 +54,6 @@ tokio-test = "0.4.4"
 
 [features]
 default = ["notify"]
-tracing = ["dep:tracing", "dep:tracing-subscriber"]
 notify = ["dep:notify"]
 
 [package.metadata.deb]

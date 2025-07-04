@@ -79,7 +79,7 @@ impl DnsFilter {
 
     pub async fn reload(&self) -> Result<(), FilterError> {
         self.load_from_default_path().await?;
-        println!("Filters reloaded successfully");
+        tracing::debug!("Filters reloaded successfully");
         Ok(())
     }
 
@@ -93,8 +93,8 @@ impl DnsFilter {
         let filter_clone = self.clone();
 
         tokio::spawn(async move {
-            let mut watcher =
-                match notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
+            let mut watcher = match notify::recommended_watcher(
+                move |res: Result<Event, notify::Error>| {
                     if let Ok(event) = res {
                         if matches!(
                             event.kind,
@@ -103,30 +103,28 @@ impl DnsFilter {
                             for path in &event.paths {
                                 if path.extension().and_then(|s| s.to_str()) == Some("list") {
                                     if let Err(e) = tx.try_send(()) {
-                                        eprintln!("Failed to send reload signal: {}", e);
+                                        tracing::error!(error=?e, "Failed to send filter change event");
                                     }
                                     break;
                                 }
                             }
                         }
                     }
-                }) {
-                    Ok(watcher) => watcher,
-                    Err(e) => {
-                        eprintln!("Failed to create file watcher: {}", e);
-                        return;
-                    }
-                };
+                },
+            ) {
+                Ok(watcher) => watcher,
+                Err(e) => {
+                    tracing::error!(error=?e, "Failed to create file watcher");
+                    return;
+                }
+            };
 
             if let Err(e) = watcher.watch(&filter_path, RecursiveMode::NonRecursive) {
-                eprintln!("Failed to watch filter directory: {}", e);
+                tracing::error!(error=?e, path=%filter_path.display(), "Failed to watch filter path");
                 return;
             }
 
-            println!(
-                "Started watching for filter changes in: {}",
-                filter_path.display()
-            );
+            tracing::debug!(path=%filter_path.display(), "Started watching for filter changes");
 
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -155,9 +153,9 @@ impl DnsFilter {
                 }
 
                 if let Err(e) = filter_clone.reload().await {
-                    eprintln!("Failed to reload filters: {}", e);
+                    tracing::error!(error=?e, "Failed to reload filters");
                 } else {
-                    println!("Filter files changed, reloaded automatically");
+                    tracing::info!("Filter files changed, reloaded automatically");
                 }
             }
         });

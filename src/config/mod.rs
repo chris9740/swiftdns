@@ -170,7 +170,7 @@ pub fn get_config() -> Result<SwiftConfig, ConfigError> {
 pub fn get_config_path() -> PathBuf {
     if cfg!(debug_assertions) {
         env::current_dir()
-            .unwrap_or_else(|_| error!("Current directory inaccessible"))
+            .expect("Failed to get current directory")
             .join("assets/")
     } else {
         Path::new("/etc/swiftdns/").to_path_buf()

@@ -1,14 +1,14 @@
 use anyhow::Result;
 use std::{io::ErrorKind, process};
 use swiftdns::cli;
-#[cfg(feature = "tracing")]
-use tracing::level_filters::LevelFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    #[cfg(feature = "tracing")]
     tracing_subscriber::fmt()
-        .with_max_level(LevelFilter::DEBUG)
+        .compact()
+        .with_target(false)
+        .without_time()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
     if let Err(err) = cli::start().await {

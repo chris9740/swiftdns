@@ -1,6 +1,3 @@
-#[macro_use]
-pub mod macros;
-
 pub mod blocking;
 pub mod cache;
 pub mod cli;

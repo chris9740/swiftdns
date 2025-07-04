@@ -33,12 +33,10 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
     let udp = udp::start_udp(addr, ctx.clone());
     let tcp = tcp::start_tcp(addr, ctx.clone());
 
-    #[cfg(feature = "tracing")]
-    {
-        tracing::info!("SwiftDNS started on {addr}");
-    }
+    tracing::info!("Listening on {addr} via UDP and TCP");
 
     tokio::try_join!(udp, tcp)?;
+
     Ok(())
 }
 
@@ -61,7 +59,7 @@ impl DnsContext {
         let filter = DnsFilter::from_default_path().await?;
         #[cfg(feature = "notify")]
         if let Err(e) = filter.start_watching().await {
-            eprintln!("Warning: failed to hot-reload filters: {}", e);
+            tracing::error!("Failed to start filter watcher: {}", e);
         }
 
         let client = Client::connect(config).await?;
@@ -151,11 +149,12 @@ impl DnsContext {
         if let FilterResult::Block(rule) = self.filter.check_domain(&domain.name()).await {
             let mut burst = self.burst.lock().await;
             if !burst.is_bursting(&domain.name()) {
-                eprintln!(
-                    "Query for {} refused (pattern `{}`, path `{}`)",
-                    domain.name(),
-                    rule.original_pattern(),
-                    rule.path()
+                tracing::warn!(
+                  domain    = %domain.name(),
+                  pattern   = %rule.original_pattern(),
+                  path      = %rule.path(),
+                  strategy  = ?self.config.blocking.strategy,
+                  "Refusing query for blocked domain"
                 );
             }
 
@@ -165,9 +164,7 @@ impl DnsContext {
                 &self.config.blocking,
             ) {
                 Some(response) => return Ok(MessageResult::Response(response)),
-                None => {
-                    return Ok(MessageResult::Drop);
-                }
+                None => return Ok(MessageResult::Drop),
             }
         }
 
@@ -181,6 +178,13 @@ impl DnsContext {
             }
             None => upstream::resolve(&self.client, &self.config, message).await?,
         };
+
+        tracing::debug!(
+            domain = %query.name(),
+            query_type = ?query.query_type(),
+            cached,
+            "Cache lookup",
+        );
 
         if !cached {
             cache.insert(query.name(), query.query_type(), &upstream_response);

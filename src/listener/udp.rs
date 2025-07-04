@@ -14,14 +14,13 @@ use crate::{
 
 pub async fn start_udp(addr: &SocketAddr, ctx: Arc<DnsContext>) -> Result<()> {
     let socket = UdpSocket::bind(addr).await?;
-    println!("Listening on {addr} (UDP)");
 
     loop {
         let mut buf = [0; 512];
         let (amt, src) = socket.recv_from(&mut buf).await?;
 
         if !is_local_ip(&src.ip()) {
-            eprintln!("non-local UDP from {src}");
+            tracing::warn!(src=%src, "Received non-local UDP query");
             continue;
         }
 
@@ -34,14 +33,14 @@ pub async fn start_udp(addr: &SocketAddr, ctx: Arc<DnsContext>) -> Result<()> {
                     // Drop strategy - no response sent (this is intentional)
                 }
                 Err(why) => {
-                    eprintln!("Error resolving query: {}", why);
+                    tracing::error!("Error resolving query: {}", why);
                     let mut error_response = create_response_base(&message);
                     error_response.set_response_code(ResponseCode::ServFail);
                     socket.send_to(&error_response.to_bytes()?, src).await?;
                 }
             }
         } else {
-            eprintln!("Received invalid DNS message from {src}");
+            tracing::warn!(src=%src, "Received invalid DNS message, ignoring");
         }
     }
 }
