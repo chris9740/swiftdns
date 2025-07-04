@@ -1,3 +1,7 @@
+mod tcp;
+mod udp;
+mod utils;
+
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
@@ -9,13 +13,8 @@ use anyhow::Result;
 use hickory_proto::{
     op::{Message, ResponseCode},
     rr::{rdata, RData, Record, RecordType},
-    serialize::binary::{BinDecodable, BinEncodable},
 };
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, UdpSocket},
-    sync::Mutex,
-};
+use tokio::sync::Mutex;
 
 use crate::{
     blocking::{self, create_response_base},
@@ -29,40 +28,23 @@ use crate::{
     upstream,
 };
 
+pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
+    let ctx = Arc::new(DnsContext::new(config).await?);
+    let udp = udp::start_udp(addr, ctx.clone());
+    let tcp = tcp::start_tcp(addr, ctx.clone());
+
+    #[cfg(feature = "tracing")]
+    {
+        tracing::info!("SwiftDNS started on {addr}");
+    }
+
+    tokio::try_join!(udp, tcp)?;
+    Ok(())
+}
+
 enum MessageResult {
     Response(Message),
     Drop,
-}
-
-struct BurstTracker {
-    registry: HashMap<String, Instant>,
-    burst_duration_secs: Duration,
-}
-
-impl BurstTracker {
-    fn new() -> Self {
-        Self {
-            registry: HashMap::new(),
-            burst_duration_secs: Duration::from_secs(15),
-        }
-    }
-
-    fn is_bursting(&mut self, key: &str) -> bool {
-        let now = Instant::now();
-
-        self.registry
-            .retain(|_, &mut t| now.duration_since(t) < self.burst_duration_secs);
-
-        let is_bursting = match self.registry.get_mut(key) {
-            Some(ts) if now.duration_since(*ts) < self.burst_duration_secs => true,
-            _ => {
-                self.registry.insert(key.to_string(), now);
-                false
-            }
-        };
-
-        is_bursting
-    }
 }
 
 struct DnsContext {
@@ -75,7 +57,6 @@ struct DnsContext {
 }
 
 impl DnsContext {
-    /// Build the filter, cache, hosts table, HTTP client, etc
     async fn new(config: &SwiftConfig) -> Result<Self> {
         let filter = DnsFilter::from_default_path().await?;
         #[cfg(feature = "notify")]
@@ -215,102 +196,33 @@ impl DnsContext {
     }
 }
 
-pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
-    let ctx = Arc::new(DnsContext::new(config).await?);
-    let udp = start_udp(addr, ctx.clone());
-    let tcp = start_tcp(addr, ctx.clone());
-
-    tokio::try_join!(udp, tcp)?;
-
-    Ok(())
+struct BurstTracker {
+    registry: HashMap<String, Instant>,
+    burst_duration_secs: Duration,
 }
 
-async fn start_udp(addr: &SocketAddr, ctx: Arc<DnsContext>) -> Result<()> {
-    let socket = UdpSocket::bind(addr).await?;
-    println!("Listening on {addr} (UDP)");
-
-    loop {
-        let mut buf = [0; 512];
-        let (amt, src) = socket.recv_from(&mut buf).await?;
-
-        if !is_local_ip(&src.ip()) {
-            eprintln!("non-local UDP from {src}");
-            continue;
-        }
-
-        if let Ok(message) = Message::from_bytes(&buf[..amt]) {
-            match ctx.handle_message(&message).await {
-                Ok(MessageResult::Response(response)) => {
-                    socket.send_to(&response.to_bytes()?, src).await?;
-                }
-                Ok(MessageResult::Drop) => {
-                    // Drop strategy - no response sent (this is intentional)
-                }
-                Err(why) => {
-                    eprintln!("Error resolving query: {}", why);
-                    let mut error_response = create_response_base(&message);
-                    error_response.set_response_code(ResponseCode::ServFail);
-                    socket.send_to(&error_response.to_bytes()?, src).await?;
-                }
-            }
-        } else {
-            eprintln!("Received invalid DNS message from {src}");
+impl BurstTracker {
+    fn new() -> Self {
+        Self {
+            registry: HashMap::new(),
+            burst_duration_secs: Duration::from_secs(15),
         }
     }
-}
 
-async fn start_tcp(addr: &SocketAddr, ctx: Arc<DnsContext>) -> Result<()> {
-    let listener = TcpListener::bind(addr).await?;
-    println!("Listening on {addr} (TCP)");
+    fn is_bursting(&mut self, key: &str) -> bool {
+        let now = Instant::now();
 
-    loop {
-        let (mut stream, peer) = listener.accept().await?;
-        if !is_local_ip(&peer.ip()) {
-            eprintln!("non-local TCP from {peer}");
-            continue;
-        }
-        let ctx = ctx.clone();
-        tokio::spawn(async move {
-            if let Err(e) = handle_tcp(&mut stream, ctx).await {
-                eprintln!("TCP handler error: {}", e);
-            }
-        });
-    }
-}
+        self.registry
+            .retain(|_, &mut t| now.duration_since(t) < self.burst_duration_secs);
 
-async fn handle_tcp(stream: &mut tokio::net::TcpStream, ctx: Arc<DnsContext>) -> Result<()> {
-    let mut lenb = [0u8; 2];
-
-    stream.read_exact(&mut lenb).await?;
-
-    let len = u16::from_be_bytes(lenb) as usize;
-    let mut buf = vec![0u8; len];
-
-    stream.read_exact(&mut buf).await?;
-
-    if let Ok(message) = Message::from_bytes(&buf) {
-        let response = match ctx.handle_message(&message).await {
-            Ok(MessageResult::Response(r)) => r,
-            Ok(MessageResult::Drop) => return Ok(()),
-            Err(_) => {
-                let mut response = create_response_base(&message);
-                response.set_response_code(ResponseCode::ServFail);
-                response
+        let is_bursting = match self.registry.get_mut(key) {
+            Some(ts) if now.duration_since(*ts) < self.burst_duration_secs => true,
+            _ => {
+                self.registry.insert(key.to_string(), now);
+                false
             }
         };
 
-        let resp_bytes = response.to_bytes()?;
-        let resp_bytes_len = resp_bytes.len() as u16;
-
-        stream.write_all(&resp_bytes_len.to_be_bytes()).await?;
-        stream.write_all(&resp_bytes).await?;
-    }
-    Ok(())
-}
-
-fn is_local_ip(ip: &IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(v4) => v4.is_loopback() || v4.is_private(),
-        IpAddr::V6(v6) => v6.is_loopback(),
+        is_bursting
     }
 }
