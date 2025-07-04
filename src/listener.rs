@@ -89,6 +89,12 @@ async fn handle_message(
         }
     };
 
+    if query.query_type() == RecordType::ANY {
+        let mut response = create_response_base(message);
+        response.set_response_code(ResponseCode::NotImp);
+        return Ok(MessageResult::Response(response));
+    }
+
     if config.hosts.enabled && hosts.contains_key(&domain) {
         let ips = hosts.get(&domain).expect("Hosts should contain the domain");
         let mut response = create_response_base(message);
@@ -114,16 +120,6 @@ async fn handle_message(
                         );
                         response.add_answer(record);
                     }
-                }
-            }
-            RecordType::ANY => {
-                for ip in ips {
-                    let rdata = match ip {
-                        IpAddr::V4(v4) => RData::A(rdata::A(*v4)),
-                        IpAddr::V6(v6) => RData::AAAA(rdata::AAAA(*v6)),
-                    };
-                    let record = Record::from_rdata(query.name().clone(), 300, rdata);
-                    response.add_answer(record);
                 }
             }
             _ => {
