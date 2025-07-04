@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
-    io::ErrorKind,
-    net::{IpAddr, SocketAddr, UdpSocket},
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -10,6 +10,11 @@ use hickory_proto::{
     op::{Message, ResponseCode},
     rr::{rdata, RData, Record, RecordType},
     serialize::binary::{BinDecodable, BinEncodable},
+};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{TcpListener, UdpSocket},
+    sync::Mutex,
 };
 
 use crate::{
@@ -60,170 +65,183 @@ impl BurstTracker {
     }
 }
 
-async fn handle_message(
-    message: &Message,
-    client: &Client,
-    config: &SwiftConfig,
-    filter: &DnsFilter,
-    cache: &mut Cache,
-    burst_tracker: &mut BurstTracker,
-    hosts: &HashMap<DnsName, Vec<IpAddr>>,
-) -> Result<MessageResult, DnsError> {
-    // RFC 1035 allows multiple queries per message for forward compatibility.
-    // This feature is not implemented or used in practice
-    // and poses security risks (DNS amplification).
-    // This implementation supports only single-query messages.
-    if message.queries().len() != 1 {
-        let mut response = create_response_base(message);
-        response.set_response_code(ResponseCode::FormErr);
-        return Ok(MessageResult::Response(response));
+struct DnsContext {
+    filter: DnsFilter,
+    cache: Arc<Mutex<Cache>>,
+    hosts: HashMap<DnsName, Vec<IpAddr>>,
+    burst: Arc<Mutex<BurstTracker>>,
+    client: Client,
+    config: SwiftConfig,
+}
+
+impl DnsContext {
+    /// Build the filter, cache, hosts table, HTTP client, etc
+    async fn new(config: &SwiftConfig) -> Result<Self> {
+        let filter = DnsFilter::from_default_path().await?;
+        #[cfg(feature = "notify")]
+        if let Err(e) = filter.start_watching().await {
+            eprintln!("Warning: failed to hot-reload filters: {}", e);
+        }
+
+        let client = Client::connect(config).await?;
+        let cache = Arc::new(Mutex::new(Cache::new(1000)));
+        let burst = Arc::new(Mutex::new(BurstTracker::new()));
+        let hosts = hosts::parse_hosts_file()?;
+
+        Ok(DnsContext {
+            filter,
+            cache,
+            hosts,
+            burst,
+            client,
+            config: config.clone(),
+        })
     }
 
-    let query = message.queries().first().unwrap();
-    let domain: DnsName = match query.name().to_string().parse() {
-        Ok(domain) => domain,
-        Err(_) => {
+    async fn handle_message(&self, message: &Message) -> Result<MessageResult, DnsError> {
+        // RFC 1035 allows multiple queries per message for forward compatibility.
+        // This feature is not implemented or used in practice
+        // and poses security risks (DNS amplification).
+        // This implementation supports only single-query messages.
+        if message.queries().len() != 1 {
             let mut response = create_response_base(message);
             response.set_response_code(ResponseCode::FormErr);
             return Ok(MessageResult::Response(response));
         }
-    };
 
-    if query.query_type() == RecordType::ANY {
-        let mut response = create_response_base(message);
-        response.set_response_code(ResponseCode::NotImp);
-        return Ok(MessageResult::Response(response));
-    }
+        let query = message.queries().first().expect("Query should exist");
+        let domain: DnsName = match query.name().to_string().parse() {
+            Ok(domain) => domain,
+            Err(_) => {
+                let mut response = create_response_base(message);
+                response.set_response_code(ResponseCode::FormErr);
+                return Ok(MessageResult::Response(response));
+            }
+        };
 
-    if config.hosts.enabled && hosts.contains_key(&domain) {
-        let ips = hosts.get(&domain).expect("Hosts should contain the domain");
-        let mut response = create_response_base(message);
-        response.set_response_code(ResponseCode::NoError);
+        if query.query_type() == RecordType::ANY {
+            let mut response = create_response_base(message);
+            response.set_response_code(ResponseCode::NotImp);
+            return Ok(MessageResult::Response(response));
+        }
 
-        match query.query_type() {
-            RecordType::A => {
-                for ip in ips {
-                    if let IpAddr::V4(v4) = ip {
-                        let record =
-                            Record::from_rdata(query.name().clone(), 300, RData::A(rdata::A(*v4)));
-                        response.add_answer(record);
+        if self.config.hosts.enabled && self.hosts.contains_key(&domain) {
+            let ips = self
+                .hosts
+                .get(&domain)
+                .expect("Hosts should contain the domain");
+            let mut response = create_response_base(message);
+            response.set_response_code(ResponseCode::NoError);
+
+            match query.query_type() {
+                RecordType::A => {
+                    for ip in ips {
+                        if let IpAddr::V4(v4) = ip {
+                            let record = Record::from_rdata(
+                                query.name().clone(),
+                                300,
+                                RData::A(rdata::A(*v4)),
+                            );
+                            response.add_answer(record);
+                        }
                     }
                 }
-            }
-            RecordType::AAAA => {
-                for ip in ips {
-                    if let IpAddr::V6(v6) = ip {
-                        let record = Record::from_rdata(
-                            query.name().clone(),
-                            300,
-                            RData::AAAA(rdata::AAAA(*v6)),
-                        );
-                        response.add_answer(record);
+                RecordType::AAAA => {
+                    for ip in ips {
+                        if let IpAddr::V6(v6) = ip {
+                            let record = Record::from_rdata(
+                                query.name().clone(),
+                                300,
+                                RData::AAAA(rdata::AAAA(*v6)),
+                            );
+                            response.add_answer(record);
+                        }
                     }
                 }
+                _ => {
+                    // Domain exists in hosts but query type is unsupported
+                    // Since /etc/hosts is authoritative, we return NODATA
+                }
             }
-            _ => {
-                // Domain exists in hosts but query type is unsupported
-                // Since /etc/hosts is authoritative, we return NODATA
+
+            return Ok(MessageResult::Response(response));
+        }
+
+        if let FilterResult::Block(rule) = self.filter.check_domain(&domain.name()).await {
+            let mut burst = self.burst.lock().await;
+            if !burst.is_bursting(&domain.name()) {
+                eprintln!(
+                    "Query for {} refused (pattern `{}`, path `{}`)",
+                    domain.name(),
+                    rule.original_pattern(),
+                    rule.path()
+                );
+            }
+
+            match blocking::create_blocked_response(
+                message,
+                query.query_type(),
+                &self.config.blocking,
+            ) {
+                Some(response) => return Ok(MessageResult::Response(response)),
+                None => {
+                    return Ok(MessageResult::Drop);
+                }
             }
         }
 
-        return Ok(MessageResult::Response(response));
-    }
+        let mut cache = self.cache.lock().await;
+        let mut cached = false;
 
-    if let FilterResult::Block(rule) = filter.check_domain(&domain.name()).await {
-        if !burst_tracker.is_bursting(&domain.name()) {
-            eprintln!(
-                "Query for {} refused (pattern `{}`, path `{}`)",
-                domain.name(),
-                rule.original_pattern(),
-                rule.path()
-            );
-        }
-
-        match blocking::create_blocked_response(message, query.query_type(), &config.blocking) {
-            Some(response) => return Ok(MessageResult::Response(response)),
-            None => {
-                return Ok(MessageResult::Drop);
+        let upstream_response = match cache.get(query.name(), query.query_type()) {
+            Some(cached_response) => {
+                cached = true;
+                cached_response
             }
+            None => upstream::resolve(&self.client, &self.config, message).await?,
+        };
+
+        if !cached {
+            cache.insert(query.name(), query.query_type(), &upstream_response);
         }
+
+        let mut response = create_response_base(message);
+        response.set_response_code(upstream_response.response_code());
+        response.add_answers(upstream_response.answers().to_vec());
+        response.add_name_servers(upstream_response.name_servers().to_vec());
+        response.add_additionals(upstream_response.additionals().to_vec());
+
+        Ok(MessageResult::Response(response))
     }
-
-    let mut cached = false;
-
-    let upstream_response = match cache.get(query.name(), query.query_type()) {
-        Some(cached_response) => {
-            cached = true;
-            cached_response
-        }
-        None => upstream::resolve(client, config, message).await?,
-    };
-
-    if !cached {
-        cache.insert(query.name(), query.query_type(), &upstream_response);
-    }
-
-    let mut response = create_response_base(message);
-    response.set_response_code(upstream_response.response_code());
-    response.add_answers(upstream_response.answers().to_vec());
-    response.add_name_servers(upstream_response.name_servers().to_vec());
-    response.add_additionals(upstream_response.additionals().to_vec());
-
-    Ok(MessageResult::Response(response))
 }
 
 pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
-    let filter = DnsFilter::from_default_path().await?;
+    let ctx = Arc::new(DnsContext::new(config).await?);
+    let udp = start_udp(addr, ctx.clone());
+    let tcp = start_tcp(addr, ctx.clone());
 
-    #[cfg(feature = "notify")]
-    if let Err(e) = filter.start_watching().await {
-        eprintln!("Warning: Failed to start filter file watching: {}", e);
-        eprintln!("Filter hot-reloading will not be available");
-    }
+    tokio::try_join!(udp, tcp)?;
 
-    let client = Client::connect(config).await?;
-    let mut cache = Cache::new(1000);
-    let mut burst_tracker = BurstTracker::new();
-    let hosts = hosts::parse_hosts_file()?;
+    Ok(())
+}
 
-    let socket = match UdpSocket::bind(addr) {
-        Ok(socket) => socket,
-        Err(err) => {
-            let suffix = match err.kind() {
-                ErrorKind::PermissionDenied => "Permission denied".to_string(),
-                ErrorKind::AddrInUse => "Address already in use".to_string(),
-                err => format!("binding error ({})", err),
-            };
-
-            error!("Failed to bind listener on addr `{addr}` ({suffix})");
-        }
-    };
-
-    println!("Listening on {addr}");
+async fn start_udp(addr: &SocketAddr, ctx: Arc<DnsContext>) -> Result<()> {
+    let socket = UdpSocket::bind(addr).await?;
+    println!("Listening on {addr} (UDP)");
 
     loop {
         let mut buf = [0; 512];
-        let (amt, src) = socket.recv_from(&mut buf)?;
+        let (amt, src) = socket.recv_from(&mut buf).await?;
 
         if !is_local_ip(&src.ip()) {
-            eprintln!("Received non-local request from {src}");
+            eprintln!("non-local UDP from {src}");
             continue;
         }
 
         if let Ok(message) = Message::from_bytes(&buf[..amt]) {
-            match handle_message(
-                &message,
-                &client,
-                config,
-                &filter,
-                &mut cache,
-                &mut burst_tracker,
-                &hosts,
-            )
-            .await
-            {
+            match ctx.handle_message(&message).await {
                 Ok(MessageResult::Response(response)) => {
-                    socket.send_to(&response.to_bytes()?, src)?;
+                    socket.send_to(&response.to_bytes()?, src).await?;
                 }
                 Ok(MessageResult::Drop) => {
                     // Drop strategy - no response sent (this is intentional)
@@ -232,13 +250,62 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
                     eprintln!("Error resolving query: {}", why);
                     let mut error_response = create_response_base(&message);
                     error_response.set_response_code(ResponseCode::ServFail);
-                    socket.send_to(&error_response.to_bytes()?, src)?;
+                    socket.send_to(&error_response.to_bytes()?, src).await?;
                 }
             }
         } else {
             eprintln!("Received invalid DNS message from {src}");
         }
     }
+}
+
+async fn start_tcp(addr: &SocketAddr, ctx: Arc<DnsContext>) -> Result<()> {
+    let listener = TcpListener::bind(addr).await?;
+    println!("Listening on {addr} (TCP)");
+
+    loop {
+        let (mut stream, peer) = listener.accept().await?;
+        if !is_local_ip(&peer.ip()) {
+            eprintln!("non-local TCP from {peer}");
+            continue;
+        }
+        let ctx = ctx.clone();
+        tokio::spawn(async move {
+            if let Err(e) = handle_tcp(&mut stream, ctx).await {
+                eprintln!("TCP handler error: {}", e);
+            }
+        });
+    }
+}
+
+async fn handle_tcp(stream: &mut tokio::net::TcpStream, ctx: Arc<DnsContext>) -> Result<()> {
+    let mut lenb = [0u8; 2];
+
+    stream.read_exact(&mut lenb).await?;
+
+    let len = u16::from_be_bytes(lenb) as usize;
+    let mut buf = vec![0u8; len];
+
+    stream.read_exact(&mut buf).await?;
+
+    if let Ok(message) = Message::from_bytes(&buf) {
+        let response = match ctx.handle_message(&message).await {
+            Ok(MessageResult::Response(r)) => r,
+            Ok(MessageResult::Drop) => return Ok(()),
+            Err(_) => {
+                let mut response = create_response_base(&message);
+                response.set_response_code(ResponseCode::ServFail);
+                response
+            }
+        };
+
+        let resp_bytes = response.to_bytes()?;
+        let resp_bytes_len = resp_bytes.len() as u16;
+
+        stream.write_all(&resp_bytes_len.to_be_bytes()).await?;
+        stream.write_all(&resp_bytes).await?;
+    }
+    Ok(())
 }
 
 fn is_local_ip(ip: &IpAddr) -> bool {

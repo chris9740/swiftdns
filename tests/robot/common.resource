@@ -100,14 +100,17 @@ Port Should Not Be Listening
 
 Run Dig Command
     [Documentation]    Run a DNS query using the `dig` command
-    [Arguments]    ${domain}    ${record_type}=A    ${timeout}=5    ${retry}=1
+    [Arguments]    ${domain}    ${record_type}=A    ${timeout}=5    ${retry}=1    ${tcp}=False
 
     VAR    ${timeout_arg}=    +timeout=${timeout}
     VAR    ${retry_arg}=    +retry=${retry}
     VAR    ${server_arg}=    @127.0.0.1
 
+    VAR    @{dig_args}=    ${timeout_arg}    ${retry_arg}    ${server_arg}
+    IF    ${tcp}    Append To List    ${dig_args}    +tcp
+
     ${result}=    Run Process
-    ...    dig    ${timeout_arg}    ${retry_arg}    ${server_arg}
+    ...    dig    @{dig_args}
     ...    -p    ${PORT}    ${domain}    ${record_type}    stderr=STDOUT
 
     Log    ${result.stdout}
@@ -115,9 +118,10 @@ Run Dig Command
 
 Query Domain
     [Documentation]    Execute DNS query expecting success
-    [Arguments]    ${domain}    ${record_type}=A    ${expected_status}=NOERROR    ${timeout}=5
+    [Arguments]    ${domain}    ${record_type}=A    ${expected_status}=NOERROR    ${timeout}=5    ${tcp}=False
 
-    ${result}=    Run Dig Command    ${domain}    ${record_type}    ${timeout}
+    ${result}=    Run Dig Command    ${domain}    ${record_type}    ${timeout}    tcp=${tcp}
+    Log    ${result.stdout}
     Should Be Equal As Integers    ${result.rc}    0    msg=DNS query failed
     Should Contain    ${result.stdout}    status: ${expected_status}
     RETURN    ${result}
