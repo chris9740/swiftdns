@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::{io::ErrorKind, process};
 use swiftdns::cli;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -8,7 +9,11 @@ async fn main() -> Result<()> {
         .compact()
         .with_target(false)
         .without_time()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(tracing::Level::INFO.into())
+                .from_env_lossy(),
+        )
         .init();
 
     if let Err(err) = cli::start().await {

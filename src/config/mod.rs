@@ -112,11 +112,14 @@ impl SwiftConfig {
                         return Err(ConfigError::InvalidResolverHost(self.resolver.url.clone()));
                     }
 
-                    // Check if host is a valid IP address or domain
-                    let is_valid =
-                        host.parse::<std::net::IpAddr>().is_ok() || Domain::from_str(host).is_ok();
+                    let is_ip = host.parse::<std::net::IpAddr>().is_ok();
 
-                    if !is_valid {
+                    if !is_ip && self.resolver.bootstrap_ips.is_none() {
+                        tracing::warn!(url = %self.resolver.url, "Resolver host is a domain but no bootstrap IPs set; \
+                        lookups will fail unless overridden by /etc/hosts or system DNS");
+                    }
+
+                    if !is_ip && Domain::from_str(host).is_err() {
                         return Err(ConfigError::InvalidResolverHost(self.resolver.url.clone()));
                     }
                 } else {
