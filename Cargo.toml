@@ -1,6 +1,6 @@
 [package]
 name = "swiftdns"
-version = "1.0.0-beta.7"
+version = "1.0.0-beta.8"
 authors = ["chris9740"]
 edition = "2021"
 description = "Local DNS resolver with DoH, Tor routing, and privacy filtering"
