@@ -50,6 +50,7 @@ struct DnsContext {
     cache: Arc<Mutex<Cache>>,
     hosts: HashMap<DnsName, Vec<IpAddr>>,
     burst: Arc<Mutex<BurstTracker>>,
+    error_rl: Arc<Mutex<RateLimiter>>,
     client: Client,
     config: SwiftConfig,
 }
@@ -65,6 +66,7 @@ impl DnsContext {
         let client = Client::connect(config).await?;
         let cache = Arc::new(Mutex::new(Cache::new(1000)));
         let burst = Arc::new(Mutex::new(BurstTracker::new()));
+        let error_rl = Arc::new(Mutex::new(RateLimiter::new(Duration::from_secs(15))));
         let hosts = hosts::parse_hosts_file()?;
 
         Ok(DnsContext {
@@ -72,6 +74,7 @@ impl DnsContext {
             cache,
             hosts,
             burst,
+            error_rl,
             client,
             config: config.clone(),
         })
@@ -171,12 +174,26 @@ impl DnsContext {
         let mut cache = self.cache.lock().await;
         let mut cached = false;
 
-        let upstream_response = match cache.get(query.name(), query.query_type()) {
-            Some(cached_response) => {
-                cached = true;
-                cached_response
+        let upstream_response = if let Some(cached_response) =
+            cache.get(query.name(), query.query_type())
+        {
+            cached = true;
+            cached_response
+        } else {
+            match upstream::resolve(&self.client, &self.config, message).await {
+                Ok(response) => response,
+                Err(err @ DnsError::NetworkError(_)) => {
+                    let mut error_rl = self.error_rl.lock().await;
+                    if error_rl.allow() {
+                        tracing::error!(error = %err, "Network error during upstream resolution");
+                    }
+                    return Err(err);
+                }
+                Err(err) => {
+                    tracing::error!(error = %err, "Error resolving query");
+                    return Err(err);
+                }
             }
-            None => upstream::resolve(&self.client, &self.config, message).await?,
         };
 
         tracing::debug!(
@@ -228,5 +245,29 @@ impl BurstTracker {
         };
 
         is_bursting
+    }
+}
+
+struct RateLimiter {
+    last: Instant,
+    interval: Duration,
+}
+
+impl RateLimiter {
+    fn new(interval: Duration) -> Self {
+        Self {
+            last: Instant::now() - interval,
+            interval,
+        }
+    }
+
+    fn allow(&mut self) -> bool {
+        let now = Instant::now();
+        if now.duration_since(self.last) >= self.interval {
+            self.last = now;
+            true
+        } else {
+            false
+        }
     }
 }

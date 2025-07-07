@@ -32,8 +32,7 @@ pub async fn start_udp(addr: &SocketAddr, ctx: Arc<DnsContext>) -> Result<()> {
                 Ok(MessageResult::Drop) => {
                     // Drop strategy - no response sent (this is intentional)
                 }
-                Err(why) => {
-                    tracing::error!("Error resolving query: {}", why);
+                Err(_) => {
                     let mut error_response = create_response_base(&message);
                     error_response.set_response_code(ResponseCode::ServFail);
                     socket.send_to(&error_response.to_bytes()?, src).await?;
