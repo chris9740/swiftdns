@@ -12,7 +12,7 @@ use hickory_proto::{
     rr::{RData, Record, RecordType},
 };
 
-use crate::{config::SwiftConfig, error::DnsError, http};
+use crate::{config::SwiftConfig, error::DnsError, remote::http};
 
 pub async fn resolve(
     client: &http::Client,

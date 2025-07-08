@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::Args;
 use std::net::SocketAddr;
 
-use crate::{config::SwiftConfig, listener};
+use crate::{config::SwiftConfig, server};
 
 #[derive(Args)]
 pub struct StartArgs {
@@ -18,5 +18,5 @@ pub struct StartArgs {
 pub async fn execute(args: StartArgs, config: &SwiftConfig) -> Result<()> {
     let addr = args.address.unwrap_or(config.address);
 
-    listener::start(&addr, config).await
+    server::start(&addr, config).await
 }

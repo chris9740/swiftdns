@@ -18,14 +18,12 @@ use tokio::sync::Mutex;
 
 use crate::{
     blocking::{self, create_response_base},
-    cache::Cache,
     config::SwiftConfig,
     domain::DnsName,
     error::DnsError,
     filter::{DnsFilter, FilterResult},
     hosts,
-    http::Client,
-    upstream,
+    remote::{cache::Cache, http::Client, upstream},
 };
 
 pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
@@ -174,27 +172,26 @@ impl DnsContext {
         let mut cache = self.cache.lock().await;
         let mut cached = false;
 
-        let upstream_response = if let Some(cached_response) =
-            cache.get(query.name(), query.query_type())
-        {
-            cached = true;
-            cached_response
-        } else {
-            match upstream::resolve(&self.client, &self.config, message).await {
-                Ok(response) => response,
-                Err(err @ DnsError::NetworkError(_)) => {
-                    let mut error_rl = self.error_rl.lock().await;
-                    if error_rl.allow() {
-                        tracing::error!(error = %err, "Network error during upstream resolution");
+        let upstream_response =
+            if let Some(cached_response) = cache.get(query.name(), query.query_type()) {
+                cached = true;
+                cached_response
+            } else {
+                match upstream::resolve(&self.client, &self.config, message).await {
+                    Ok(response) => response,
+                    Err(err @ DnsError::NetworkError(_)) => {
+                        let mut error_rl = self.error_rl.lock().await;
+                        if error_rl.allow() {
+                            tracing::error!(error = %err, "Upstream network error");
+                        }
+                        return Err(err);
                     }
-                    return Err(err);
+                    Err(err) => {
+                        tracing::error!(error = %err, "Upstream query error");
+                        return Err(err);
+                    }
                 }
-                Err(err) => {
-                    tracing::error!(error = %err, "Error resolving query");
-                    return Err(err);
-                }
-            }
-        };
+            };
 
         tracing::debug!(
             domain = %query.name(),

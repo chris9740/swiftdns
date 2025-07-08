@@ -8,8 +8,8 @@ use tokio::net::UdpSocket;
 
 use crate::{
     blocking::create_response_base,
-    listener::utils::is_local_ip,
-    listener::{DnsContext, MessageResult},
+    server::utils::is_local_ip,
+    server::{DnsContext, MessageResult},
 };
 
 pub async fn start_udp(addr: &SocketAddr, ctx: Arc<DnsContext>) -> Result<()> {

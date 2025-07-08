@@ -19,8 +19,7 @@ use crate::{
     domain::DnsName,
     filter::{DnsFilter, FilterResult},
     hosts,
-    http::Client,
-    upstream,
+    remote::{http::Client, upstream},
 };
 
 #[derive(Args)]

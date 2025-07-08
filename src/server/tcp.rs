@@ -11,7 +11,7 @@ use tokio::{
 
 use crate::{
     blocking::create_response_base,
-    listener::{utils::is_local_ip, DnsContext, MessageResult},
+    server::{utils::is_local_ip, DnsContext, MessageResult},
 };
 
 pub async fn start_tcp(addr: &SocketAddr, ctx: Arc<DnsContext>) -> Result<()> {
