@@ -21,10 +21,13 @@ use crate::{
     config::SwiftConfig,
     domain::DnsName,
     error::DnsError,
-    filter::{DnsFilter, FilterResult},
+    filter::{types::FilterResult, DomainFilter},
     hosts,
     remote::{cache::Cache, http::Client, upstream},
 };
+
+#[cfg(feature = "notify")]
+use crate::filter::observer;
 
 pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
     let ctx = Arc::new(DnsContext::new(config).await?);
@@ -44,7 +47,7 @@ enum MessageResult {
 }
 
 struct DnsContext {
-    filter: DnsFilter,
+    filter: DomainFilter,
     cache: Arc<Mutex<Cache>>,
     hosts: HashMap<DnsName, Vec<IpAddr>>,
     burst: Arc<Mutex<BurstTracker>>,
@@ -55,9 +58,9 @@ struct DnsContext {
 
 impl DnsContext {
     async fn new(config: &SwiftConfig) -> Result<Self> {
-        let filter = DnsFilter::from_default_path().await?;
+        let filter = DomainFilter::from_default_path().await?;
         #[cfg(feature = "notify")]
-        if let Err(e) = filter.start_watching().await {
+        if let Err(e) = observer::start_watching(&filter).await {
             tracing::error!("Failed to start filter watcher: {}", e);
         }
 

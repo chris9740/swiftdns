@@ -8,6 +8,7 @@ test: package
 	docker run --rm swiftdns:test
 
 e2e-test:
+	cargo build
 	robot -d tests/robot/results tests/robot
 
 release: test

@@ -17,7 +17,7 @@ use url::Url;
 use crate::{
     config::SwiftConfig,
     domain::DnsName,
-    filter::{DnsFilter, FilterResult},
+    filter::{types::FilterResult, DomainFilter},
     hosts,
     remote::{http::Client, upstream},
 };
@@ -91,9 +91,9 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
     }
 
     let filter = if std::env::var("SWIFTDNS_CLI_TEST_MODE").is_ok() {
-        DnsFilter::from_mock_data()
+        DomainFilter::from_mock_data()
     } else {
-        DnsFilter::from_default_path().await?
+        DomainFilter::from_default_path().await?
     };
 
     if let FilterResult::Block(entry) = filter.check_domain(&args.domain.name()).await {
