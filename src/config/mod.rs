@@ -115,8 +115,9 @@ impl SwiftConfig {
                     let is_ip = host.parse::<std::net::IpAddr>().is_ok();
 
                     if !is_ip && self.resolver.bootstrap_ips.is_none() {
-                        tracing::warn!(url = %self.resolver.url, "Resolver host is a domain but no bootstrap IPs set; \
-                        lookups will fail unless overridden by /etc/hosts or system DNS");
+                        tracing::warn!(
+                            "No bootstrap IPs set for domain resolver; resolution may fail"
+                        );
                     }
 
                     if !is_ip && Domain::from_str(host).is_err() {

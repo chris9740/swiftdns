@@ -74,6 +74,14 @@ impl Client {
             tor::proxy::validate(&result.client).await?;
         }
 
+        #[cfg(not(test))]
+        {
+            let response = result.client.get(&config.resolver.url).send().await;
+            if let Err(e) = response {
+                return Err(anyhow::anyhow!("Failed to connect to upstream: {e}"));
+            }
+        }
+
         Ok(result)
     }
 
