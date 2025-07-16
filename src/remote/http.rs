@@ -95,17 +95,24 @@ impl Client {
 mod tor {
     pub mod proxy {
         use anyhow::Result;
+        use serde::{Deserialize, Serialize};
+
+        #[derive(Serialize, Deserialize)]
+        pub struct TorCheckResponse {
+            #[serde(rename = "IsTor")]
+            pub is_tor: bool,
+        }
 
         pub async fn validate(client: &reqwest::Client) -> Result<()> {
-            let connectivity_check_url = "https://check.torproject.org";
+            let connectivity_check_url = "https://check.torproject.org/api/ip";
             let response = client
                 .get(connectivity_check_url)
                 .send()
                 .await?
-                .text()
+                .json::<TorCheckResponse>()
                 .await?;
 
-            if !response.contains("Congratulations. This browser is configured to use Tor.") {
+            if !response.is_tor {
                 anyhow::bail!(
                     "The proxy settings are correct, but it looks like we're not actually routing through the Tor network.\n\
                     Confirm that your configured proxy is specifically a Tor proxy, and ensure the Tor service is running."
