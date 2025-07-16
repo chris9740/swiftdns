@@ -54,6 +54,13 @@ pub async fn execute(config: &SwiftConfig) -> Result<()> {
         }
     )?;
 
+    writeln!(
+        tw,
+        "  {}:\t{}",
+        "Hosts file enabled".cyan(),
+        if config.hosts.enabled { "Yes" } else { "No" }
+    )?;
+
     writeln!(tw, "  {}:\t{}", "Upstream".cyan(), config.resolver.url)?;
 
     let bootstrap_ips = config.resolver.bootstrap_ips.clone().unwrap_or_default();
