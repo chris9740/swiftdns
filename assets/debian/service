@@ -1,14 +1,20 @@
 [Unit]
 Description=Linux DNS client with privacy & blacklisting features
-After=systemd-networkd.service
+After=systemd-networkd.service network-online.target
+Wants=network-online.target
 
 [Service]
 User=swiftdns
 ExecStart=/usr/bin/swiftdns start
 Restart=on-failure
-RestartSec=3s
-StartLimitBurst=5
+RestartSec=5s
+StartLimitBurst=10
+StartLimitIntervalSec=300
 AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=10
 
 [Install]
 WantedBy=multi-user.target
