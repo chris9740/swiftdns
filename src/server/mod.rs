@@ -108,46 +108,44 @@ impl DnsContext {
             return Ok(MessageResult::Response(response));
         }
 
-        if self.config.hosts.enabled && self.hosts.contains_key(&domain) {
-            let ips = self
-                .hosts
-                .get(&domain)
-                .expect("Hosts should contain the domain");
-            let mut response = create_response_base(message);
-            response.set_response_code(ResponseCode::NoError);
+        if self.config.hosts.enabled {
+            if let Some(ips) = self.hosts.get(&domain) {
+                let mut response = create_response_base(message);
+                response.set_response_code(ResponseCode::NoError);
 
-            match query.query_type() {
-                RecordType::A => {
-                    for ip in ips {
-                        if let IpAddr::V4(v4) = ip {
-                            let record = Record::from_rdata(
-                                query.name().clone(),
-                                300,
-                                RData::A(rdata::A(*v4)),
-                            );
-                            response.add_answer(record);
+                match query.query_type() {
+                    RecordType::A => {
+                        for ip in ips {
+                            if let IpAddr::V4(v4) = ip {
+                                let record = Record::from_rdata(
+                                    query.name().clone(),
+                                    300,
+                                    RData::A(rdata::A(*v4)),
+                                );
+                                response.add_answer(record);
+                            }
                         }
                     }
-                }
-                RecordType::AAAA => {
-                    for ip in ips {
-                        if let IpAddr::V6(v6) = ip {
-                            let record = Record::from_rdata(
-                                query.name().clone(),
-                                300,
-                                RData::AAAA(rdata::AAAA(*v6)),
-                            );
-                            response.add_answer(record);
+                    RecordType::AAAA => {
+                        for ip in ips {
+                            if let IpAddr::V6(v6) = ip {
+                                let record = Record::from_rdata(
+                                    query.name().clone(),
+                                    300,
+                                    RData::AAAA(rdata::AAAA(*v6)),
+                                );
+                                response.add_answer(record);
+                            }
                         }
                     }
+                    _ => {
+                        // Domain exists in hosts but query type is unsupported
+                        // Since /etc/hosts is authoritative, we return NODATA
+                    }
                 }
-                _ => {
-                    // Domain exists in hosts but query type is unsupported
-                    // Since /etc/hosts is authoritative, we return NODATA
-                }
+
+                return Ok(MessageResult::Response(response));
             }
-
-            return Ok(MessageResult::Response(response));
         }
 
         if let FilterResult::Block(rule) = self.filter.check_domain(&domain.name()).await {

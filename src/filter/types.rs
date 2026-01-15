@@ -1,3 +1,4 @@
+use crate::config;
 use wildmatch::WildMatch;
 
 #[derive(Debug, Default, Clone)]
@@ -96,6 +97,7 @@ pub enum FilterResult {
 #[error("Filter error: {0}")]
 pub enum FilterError {
     IoError(String),
+    ConfigError(config::error::ConfigError),
     #[cfg(feature = "notify")]
     WatchError(String),
 }

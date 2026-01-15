@@ -1,3 +1,5 @@
+#![deny(clippy::unwrap_used, clippy::panic)]
+
 pub mod blocking;
 pub mod cli;
 pub mod config;

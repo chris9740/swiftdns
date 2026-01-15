@@ -52,7 +52,7 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
 
     if config.hosts.enabled {
         if let Some(ips) = hosts_map.get(&args.domain) {
-            let name = Name::from_str(&args.domain.name()).unwrap();
+            let name = Name::from_str(&args.domain.name())?;
             let mut rows = Vec::new();
 
             match args.qtype {
@@ -106,13 +106,9 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
         return Ok(());
     }
 
+    let id = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as u16;
     let client = Client::connect(&config).await?;
     let start = Instant::now();
-
-    let id = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as u16;
 
     let mut message = Message::new();
     message.set_id(id);

@@ -2,7 +2,7 @@ pub mod error;
 
 use std::{
     env,
-    net::SocketAddr,
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -69,13 +69,17 @@ pub struct HostsConfig {
 impl Default for SwiftConfig {
     fn default() -> Self {
         Self {
-            address: "127.0.0.1:53".parse().unwrap(),
+            address: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 53)),
             resolver: ResolverConfig {
                 url: "https://cloudflare-dns.com/dns-query".to_string(),
-                bootstrap_ips: Some(vec![
-                    "1.1.1.1:443".parse().unwrap(),
-                    "1.0.0.1:443".parse().unwrap(),
-                ]),
+                bootstrap_ips: Some(
+                    vec![[1, 1, 1, 1], [1, 0, 0, 1]]
+                        .into_iter()
+                        .map(|octets| {
+                            SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::from(octets), 443))
+                        })
+                        .collect(),
+                ),
             },
             tor: TorConfig {
                 enabled: false,
@@ -167,22 +171,22 @@ pub fn get_config_from_path(path: PathBuf) -> Result<SwiftConfig, ConfigError> {
 }
 
 pub fn get_config() -> Result<SwiftConfig, ConfigError> {
-    let config_path = get_config_path().join(CONFIG_FILE_NAME);
+    let config_path = get_config_path()?.join(CONFIG_FILE_NAME);
     get_config_from_path(config_path)
 }
 
-pub fn get_config_path() -> PathBuf {
+pub fn get_config_path() -> Result<PathBuf, ConfigError> {
     if cfg!(debug_assertions) {
-        env::current_dir()
-            .expect("Failed to get current directory")
-            .join("assets/")
+        let current_dir =
+            env::current_dir().map_err(|e| ConfigError::IoError(PathBuf::from("."), e))?;
+        Ok(current_dir.join("assets/"))
     } else {
-        Path::new("/etc/swiftdns/").to_path_buf()
+        Ok(Path::new("/etc/swiftdns/").to_path_buf())
     }
 }
 
-pub fn get_filters_path() -> PathBuf {
-    get_config_path().join("filters")
+pub fn get_filters_path() -> Result<PathBuf, ConfigError> {
+    Ok(get_config_path()?.join("filters"))
 }
 
 pub fn create_default_config(path: &Path) -> Result<(), ConfigError> {

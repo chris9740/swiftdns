@@ -1,9 +1,17 @@
+use std::net::{Ipv4Addr, Ipv6Addr};
+
 use hickory_proto::{
     op::{Message, ResponseCode},
-    rr::{RData, Record, RecordType},
+    rr::{
+        rdata::{A, AAAA},
+        RData, Record, RecordType,
+    },
 };
 
 use crate::config::{BlockConfig, BlockStrategy};
+
+const SINKHOLE_IPV4: Ipv4Addr = Ipv4Addr::new(0, 0, 0, 0);
+const SINKHOLE_IPV6: Ipv6Addr = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
 
 pub fn create_blocked_response(
     message: &Message,
@@ -21,12 +29,18 @@ pub fn create_blocked_response(
 
             match query_type {
                 RecordType::A => {
-                    let sinkhole = RData::A("0.0.0.0".parse().unwrap());
-                    response.add_answer(Record::from_rdata(query.name().clone(), ttl, sinkhole));
+                    response.add_answer(Record::from_rdata(
+                        query.name().clone(),
+                        ttl,
+                        RData::A(A(SINKHOLE_IPV4)),
+                    ));
                 }
                 RecordType::AAAA => {
-                    let sinkhole = RData::AAAA("::".parse().unwrap());
-                    response.add_answer(Record::from_rdata(query.name().clone(), ttl, sinkhole));
+                    response.add_answer(Record::from_rdata(
+                        query.name().clone(),
+                        ttl,
+                        RData::AAAA(AAAA(SINKHOLE_IPV6)),
+                    ));
                 }
                 _ => {
                     response.set_response_code(ResponseCode::Refused);

@@ -11,7 +11,7 @@ use crate::{
 
 pub async fn start_watching(filter: &DomainFilter) -> Result<(), FilterError> {
     let (tx, mut rx) = mpsc::channel(100);
-    let filter_path = config::get_filters_path();
+    let filter_path = config::get_filters_path().map_err(FilterError::ConfigError)?;
     let filter_clone = filter.clone();
 
     tokio::spawn(async move {

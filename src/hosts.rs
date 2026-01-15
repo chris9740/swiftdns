@@ -16,7 +16,11 @@ pub fn parse_hosts<R: BufRead>(reader: R) -> io::Result<HashMap<DnsName, Vec<IpA
 
     for line in reader.lines() {
         let line = line?;
-        let line = line.split('#').next().unwrap().trim();
+        let line = line
+            .split('#')
+            .next()
+            .expect("Line should have at least one part")
+            .trim();
 
         if line.is_empty() {
             continue;

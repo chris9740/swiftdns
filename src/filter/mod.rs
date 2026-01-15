@@ -43,13 +43,14 @@ impl DomainFilter {
     }
 
     pub async fn from_default_path() -> Result<Self, FilterError> {
-        DomainFilter::new(config::get_filters_path()).await
+        let path = config::get_filters_path().map_err(FilterError::ConfigError)?;
+        DomainFilter::new(path).await
     }
 
     pub async fn reload(&self) -> Result<(), FilterError> {
         let file_data = scan_dir(&self.path)?;
         let mut filter = self.context.write().await;
-        populate_filter_context(&mut filter, file_data)?;
+        populate_filter_context(&mut filter, file_data);
         Ok(())
     }
 
@@ -94,7 +95,7 @@ impl DomainFilter {
         ];
 
         let mut inner = FilterContext::default();
-        populate_filter_context(&mut inner, mock_files).unwrap();
+        populate_filter_context(&mut inner, mock_files);
 
         DomainFilter {
             path: PathBuf::new(),

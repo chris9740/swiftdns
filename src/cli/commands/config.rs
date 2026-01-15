@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::crate_version;
 use colored::*;
-use std::io::Write;
+use std::{io::Write, path::PathBuf};
 use tabwriter::TabWriter;
 
 use crate::config::{get_config_path, SwiftConfig, CONFIG_FILE_NAME};
@@ -31,6 +31,7 @@ pub async fn execute(config: &SwiftConfig) -> Result<()> {
         })
         .unwrap_or_else(|| {
             get_config_path()
+                .unwrap_or_else(|_| PathBuf::from("."))
                 .join(CONFIG_FILE_NAME)
                 .display()
                 .to_string()

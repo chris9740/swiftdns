@@ -29,10 +29,7 @@ where
         .collect()
 }
 
-pub fn populate_filter_context(
-    filter: &mut FilterContext,
-    files: Vec<(String, String)>,
-) -> Result<(), FilterError> {
+pub fn populate_filter_context(filter: &mut FilterContext, files: Vec<(String, String)>) {
     filter.filters.clear();
     filter.whitelist.clear();
 
@@ -53,7 +50,10 @@ pub fn populate_filter_context(
             if is_whitelist {
                 filter.whitelist.push(filter_pattern);
             } else {
-                blacklist_data.as_mut().unwrap().add_pattern(filter_pattern);
+                blacklist_data
+                    .as_mut()
+                    .expect("Blacklist data should exist")
+                    .add_pattern(filter_pattern);
             }
         }
 
@@ -61,8 +61,6 @@ pub fn populate_filter_context(
             filter.filters.push(data);
         }
     }
-
-    Ok(())
 }
 
 fn parse_pattern(pattern: &str, filename: &str, line_number: usize) -> FilterPattern {
