@@ -65,23 +65,10 @@ pub fn populate_filter_context(filter: &mut FilterContext, files: Vec<(String, S
 
 fn parse_pattern(pattern: &str, filename: &str, line_number: usize) -> FilterPattern {
     if let Some(exact_domain) = pattern.strip_prefix('^') {
-        FilterPattern::Exact {
-            pattern: pattern.to_string(),
-            filename: filename.to_string(),
-            line_number,
-            exact_domain: exact_domain.to_string(),
-        }
+        FilterPattern::exact(pattern, filename, line_number, exact_domain)
     } else if pattern.contains('*') {
-        FilterPattern::Wildcard {
-            pattern: pattern.to_string(),
-            filename: filename.to_string(),
-            line_number,
-        }
+        FilterPattern::wildcard(pattern, filename, line_number)
     } else {
-        FilterPattern::Domain {
-            pattern: pattern.to_string(),
-            filename: filename.to_string(),
-            line_number,
-        }
+        FilterPattern::domain(pattern, filename, line_number)
     }
 }

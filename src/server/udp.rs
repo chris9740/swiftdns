@@ -12,11 +12,14 @@ use crate::{
     server::{DnsContext, MessageResult},
 };
 
+/// Maximum size for a DNS message over UDP (RFC 1035)
+const UDP_MAX_MESSAGE_SIZE: usize = 512;
+
 pub async fn start_udp(addr: &SocketAddr, ctx: Arc<DnsContext>) -> Result<()> {
     let socket = UdpSocket::bind(addr).await?;
 
     loop {
-        let mut buf = [0; 512];
+        let mut buf = [0; UDP_MAX_MESSAGE_SIZE];
         let (amt, src) = socket.recv_from(&mut buf).await?;
 
         if !is_local_ip(&src.ip()) {

@@ -10,9 +10,18 @@ use hickory_proto::{
 
 use crate::config::{BlockConfig, BlockStrategy};
 
+/// IPv4 sinkhole address (0.0.0.0)
 const SINKHOLE_IPV4: Ipv4Addr = Ipv4Addr::new(0, 0, 0, 0);
+
+/// IPv6 sinkhole address (::)
 const SINKHOLE_IPV6: Ipv6Addr = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
 
+/// TTL for sinkhole responses (in seconds)
+const SINKHOLE_TTL: u32 = 1;
+
+/// Creates a DNS response for a blocked domain based on the configured blocking strategy.
+///
+/// Returns `None` for the `Drop` strategy, indicating the query should be silently dropped.
 pub fn create_blocked_response(
     message: &Message,
     query_type: RecordType,
@@ -23,28 +32,17 @@ pub fn create_blocked_response(
 
     match config.strategy {
         BlockStrategy::Sinkhole => {
-            let ttl = 1;
-
             response.set_response_code(ResponseCode::NoError);
 
-            match query_type {
-                RecordType::A => {
-                    response.add_answer(Record::from_rdata(
-                        query.name().clone(),
-                        ttl,
-                        RData::A(A(SINKHOLE_IPV4)),
-                    ));
-                }
-                RecordType::AAAA => {
-                    response.add_answer(Record::from_rdata(
-                        query.name().clone(),
-                        ttl,
-                        RData::AAAA(AAAA(SINKHOLE_IPV6)),
-                    ));
-                }
-                _ => {
-                    response.set_response_code(ResponseCode::Refused);
-                }
+            if let Some(rdata) = sinkhole_rdata(query_type) {
+                response.add_answer(Record::from_rdata(
+                    query.name().clone(),
+                    SINKHOLE_TTL,
+                    rdata,
+                ));
+            } else {
+                // Unsupported record types get REFUSED
+                response.set_response_code(ResponseCode::Refused);
             }
 
             Some(response)
@@ -57,10 +55,20 @@ pub fn create_blocked_response(
             response.set_response_code(ResponseCode::Refused);
             Some(response)
         }
-        BlockStrategy::Drop => None, // Signal to drop the packet
+        BlockStrategy::Drop => None,
     }
 }
 
+/// Returns the appropriate sinkhole RData for the given record type.
+fn sinkhole_rdata(query_type: RecordType) -> Option<RData> {
+    match query_type {
+        RecordType::A => Some(RData::A(A(SINKHOLE_IPV4))),
+        RecordType::AAAA => Some(RData::AAAA(AAAA(SINKHOLE_IPV6))),
+        _ => None,
+    }
+}
+
+/// Creates a base DNS response message from a query.
 pub fn create_response_base(message: &Message) -> Message {
     let mut response = message.clone();
 

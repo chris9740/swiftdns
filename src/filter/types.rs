@@ -1,6 +1,33 @@
 use crate::config;
 use wildmatch::WildMatch;
 
+/// Common metadata shared by all filter pattern types.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PatternSource {
+    pub pattern: String,
+    pub filename: String,
+    pub line_number: usize,
+}
+
+impl PatternSource {
+    pub fn new(
+        pattern: impl Into<String>,
+        filename: impl Into<String>,
+        line_number: usize,
+    ) -> Self {
+        Self {
+            pattern: pattern.into(),
+            filename: filename.into(),
+            line_number,
+        }
+    }
+
+    /// Returns the location string in "filename:line" format.
+    pub fn location(&self) -> String {
+        format!("{}:{}", self.filename, self.line_number)
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct FilterData {
     pub exact_matches: Vec<FilterPattern>,
@@ -20,69 +47,72 @@ impl FilterData {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FilterPattern {
+    /// Exact match: only matches the specified domain exactly (prefix: ^)
     Exact {
-        pattern: String,
-        filename: String,
-        line_number: usize,
+        source: PatternSource,
         exact_domain: String,
     },
-    Domain {
-        pattern: String,
-        filename: String,
-        line_number: usize,
-    },
-    Wildcard {
-        pattern: String,
-        filename: String,
-        line_number: usize,
-    },
+    /// Domain match: matches the domain and all its subdomains
+    Domain { source: PatternSource },
+    /// Wildcard match: uses glob-style patterns with * wildcards
+    Wildcard { source: PatternSource },
 }
 
 impl FilterPattern {
+    /// Creates a new exact-match pattern.
+    pub fn exact(pattern: &str, filename: &str, line_number: usize, exact_domain: &str) -> Self {
+        Self::Exact {
+            source: PatternSource::new(pattern, filename, line_number),
+            exact_domain: exact_domain.to_string(),
+        }
+    }
+
+    /// Creates a new domain-match pattern.
+    pub fn domain(pattern: &str, filename: &str, line_number: usize) -> Self {
+        Self::Domain {
+            source: PatternSource::new(pattern, filename, line_number),
+        }
+    }
+
+    /// Creates a new wildcard-match pattern.
+    pub fn wildcard(pattern: &str, filename: &str, line_number: usize) -> Self {
+        Self::Wildcard {
+            source: PatternSource::new(pattern, filename, line_number),
+        }
+    }
+
+    /// Returns the source metadata for this pattern.
+    fn source(&self) -> &PatternSource {
+        match self {
+            Self::Exact { source, .. } | Self::Domain { source } | Self::Wildcard { source } => {
+                source
+            }
+        }
+    }
+
     pub fn matches(&self, domain: &str) -> bool {
         match self {
-            FilterPattern::Exact { exact_domain, .. } => exact_domain == domain,
-            FilterPattern::Domain { pattern, .. } => {
+            Self::Exact { exact_domain, .. } => exact_domain == domain,
+            Self::Domain { source } => {
                 let parts: Vec<&str> = domain.split('.').collect();
                 for i in 0..parts.len() {
                     let suffix = parts[i..].join(".");
-                    if pattern == &suffix {
+                    if source.pattern == suffix {
                         return true;
                     }
                 }
                 false
             }
-            FilterPattern::Wildcard { pattern, .. } => WildMatch::new(pattern).matches(domain),
+            Self::Wildcard { source } => WildMatch::new(&source.pattern).matches(domain),
         }
     }
 
     pub fn original_pattern(&self) -> &str {
-        match self {
-            FilterPattern::Exact { pattern, .. } => pattern,
-            FilterPattern::Domain { pattern, .. } => pattern,
-            FilterPattern::Wildcard { pattern, .. } => pattern,
-        }
+        &self.source().pattern
     }
 
     pub fn path(&self) -> String {
-        let (filename, line_number) = match self {
-            FilterPattern::Exact {
-                filename,
-                line_number,
-                ..
-            } => (filename, line_number),
-            FilterPattern::Domain {
-                filename,
-                line_number,
-                ..
-            } => (filename, line_number),
-            FilterPattern::Wildcard {
-                filename,
-                line_number,
-                ..
-            } => (filename, line_number),
-        };
-        format!("{}:{}", filename, line_number)
+        self.source().location()
     }
 }
 

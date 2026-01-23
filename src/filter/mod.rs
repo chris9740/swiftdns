@@ -121,28 +121,24 @@ mod tests {
 
         assert_eq!(
             filter.check_domain("facebook.com").await,
-            FilterResult::Block(FilterPattern::Exact {
-                pattern: "^facebook.com".to_string(),
-                filename: "social-media.list".to_string(),
-                line_number: 1,
-                exact_domain: "facebook.com".to_string()
-            })
+            FilterResult::Block(FilterPattern::exact(
+                "^facebook.com",
+                "social-media.list",
+                1,
+                "facebook.com"
+            ))
         );
         assert_eq!(
             filter.check_domain("instagram.com").await,
-            FilterResult::Block(FilterPattern::Domain {
-                pattern: "instagram.com".to_string(),
-                filename: "social-media.list".to_string(),
-                line_number: 2
-            })
+            FilterResult::Block(FilterPattern::domain(
+                "instagram.com",
+                "social-media.list",
+                2
+            ))
         );
         assert_eq!(
             filter.check_domain("tiktokvideo.com").await,
-            FilterResult::Block(FilterPattern::Wildcard {
-                pattern: "*tiktok*".to_string(),
-                filename: "social-media.list".to_string(),
-                line_number: 3
-            })
+            FilterResult::Block(FilterPattern::wildcard("*tiktok*", "social-media.list", 3))
         );
     }
 
@@ -152,28 +148,20 @@ mod tests {
 
         assert_eq!(
             filter.check_domain("packages.microsoft.com").await,
-            FilterResult::Whitelisted(FilterPattern::Exact {
-                pattern: "^packages.microsoft.com".to_string(),
-                filename: "whitelist.list".to_string(),
-                line_number: 1,
-                exact_domain: "packages.microsoft.com".to_string()
-            })
+            FilterResult::Whitelisted(FilterPattern::exact(
+                "^packages.microsoft.com",
+                "whitelist.list",
+                1,
+                "packages.microsoft.com"
+            ))
         );
         assert_eq!(
             filter.check_domain("github.com").await,
-            FilterResult::Whitelisted(FilterPattern::Domain {
-                pattern: "github.com".to_string(),
-                filename: "whitelist.list".to_string(),
-                line_number: 2
-            })
+            FilterResult::Whitelisted(FilterPattern::domain("github.com", "whitelist.list", 2))
         );
         assert_eq!(
             filter.check_domain("api.example.com").await,
-            FilterResult::Whitelisted(FilterPattern::Wildcard {
-                pattern: "api.*.com".to_string(),
-                filename: "whitelist.list".to_string(),
-                line_number: 3
-            })
+            FilterResult::Whitelisted(FilterPattern::wildcard("api.*.com", "whitelist.list", 3))
         );
     }
 

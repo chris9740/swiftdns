@@ -9,19 +9,29 @@ use crate::{
     filter::{types::FilterError, DomainFilter},
 };
 
+/// Starts watching the filter directory for changes.
+///
+/// When filter files are modified, the domain filter is automatically reloaded.
+/// File change events are debounced to avoid excessive reloading.
 pub async fn start_watching(filter: &DomainFilter) -> Result<(), FilterError> {
     let (tx, mut rx) = mpsc::channel(100);
     let filter_path = config::get_filters_path().map_err(FilterError::ConfigError)?;
     let filter_clone = filter.clone();
 
+    let watcher_path = filter_path.clone();
     tokio::spawn(async move {
-        if let Err(e) = setup_file_watcher(&filter_path, tx) {
-            tracing::error!(error=?e, "Failed to set up filter file watcher");
-            return;
-        }
-
-        loop {
-            sleep(Duration::from_secs(1)).await;
+        match setup_file_watcher(&watcher_path, tx) {
+            Ok(_watcher) => {
+                tracing::debug!(path=%watcher_path.display(), "Started watching for filter changes");
+                // Keep the watcher alive by holding it in this task.
+                // The task runs forever, keeping the watcher active.
+                loop {
+                    sleep(Duration::from_secs(3600)).await;
+                }
+            }
+            Err(e) => {
+                tracing::error!(error=?e, "Failed to set up filter file watcher");
+            }
         }
     });
 
@@ -47,7 +57,7 @@ pub async fn start_watching(filter: &DomainFilter) -> Result<(), FilterError> {
 fn setup_file_watcher(
     filter_path: &Path,
     tx: tokio::sync::mpsc::Sender<()>,
-) -> Result<(), notify::Error> {
+) -> Result<notify::RecommendedWatcher, notify::Error> {
     use notify::{Event, EventKind, RecursiveMode, Watcher};
 
     let tx_clone = tx.clone();
@@ -71,11 +81,8 @@ fn setup_file_watcher(
     })?;
 
     watcher.watch(filter_path, RecursiveMode::NonRecursive)?;
-    tracing::debug!(path=%filter_path.display(), "Started watching for filter changes");
 
-    std::mem::forget(watcher);
-
-    Ok(())
+    Ok(watcher)
 }
 
 async fn debounce_events(rx: &mut tokio::sync::mpsc::Receiver<()>, duration: Duration) -> bool {

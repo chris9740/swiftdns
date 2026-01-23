@@ -7,21 +7,31 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// A simple LRU cache for DNS responses.
+///
+/// Entries are automatically evicted when:
+/// - The cache exceeds its capacity (oldest entries removed first)
+/// - An entry's TTL has expired
 pub struct Cache {
     capacity: usize,
-    entries: HashMap<(Name, RecordType), CacheEntry>,
-    lru_keys: VecDeque<(Name, RecordType)>,
+    entries: HashMap<CacheKey, CacheEntry>,
+    lru_keys: VecDeque<CacheKey>,
 }
+
+/// Cache key combining domain name and record type.
+type CacheKey = (Name, RecordType);
 
 #[derive(Clone, Debug)]
 struct CacheEntry {
-    pub response: Message,
-    pub expires_at: Instant,
+    response: Message,
+    expires_at: Instant,
 }
 
+/// Default TTL when response has no answers (in seconds).
 const DEFAULT_TTL_SECONDS: u32 = 300;
 
 impl Cache {
+    /// Creates a new cache with the specified maximum capacity.
     pub fn new(capacity: usize) -> Self {
         Self {
             capacity,
@@ -30,6 +40,9 @@ impl Cache {
         }
     }
 
+    /// Retrieves a cached response, updating TTLs to reflect remaining time.
+    ///
+    /// Returns `None` if the entry doesn't exist or has expired.
     pub fn get(&mut self, name: &Name, record_type: RecordType) -> Option<Message> {
         let now = Instant::now();
         let key = (name.clone(), record_type);
@@ -41,23 +54,24 @@ impl Cache {
             return None;
         }
 
-        let remaining = entry.expires_at.saturating_duration_since(now);
-        let new_ttl = remaining.as_secs() as u32;
+        let remaining_ttl = entry.expires_at.saturating_duration_since(now).as_secs() as u32;
 
         let mut message = entry.response.clone();
-
         for answer in message.answers_mut() {
-            answer.set_ttl(new_ttl);
+            answer.set_ttl(remaining_ttl);
         }
 
         self.remove_from_lru(&key);
-        self.lru_keys.push_back(key.clone());
+        self.lru_keys.push_back(key);
 
         Some(message)
     }
 
+    /// Inserts a response into the cache.
+    ///
+    /// TTL is derived from the minimum TTL of all answer records.
+    /// Responses with TTL of 0 are not cached.
     pub fn insert(&mut self, name: &Name, record_type: RecordType, response: &Message) {
-        let now = Instant::now();
         let ttl = response
             .answers()
             .iter()
@@ -65,19 +79,26 @@ impl Cache {
             .min()
             .unwrap_or(DEFAULT_TTL_SECONDS);
 
+        // Don't cache responses with zero TTL
         if ttl == 0 {
             return;
         }
 
-        let expires_at: Instant = now
-            .checked_add(Duration::from_secs(ttl as u64))
-            .unwrap_or_else(|| now + Duration::from_secs(DEFAULT_TTL_SECONDS as u64));
+        let now = Instant::now();
+        let expires_at = now
+            .checked_add(Duration::from_secs(u64::from(ttl)))
+            .unwrap_or_else(|| now + Duration::from_secs(u64::from(DEFAULT_TTL_SECONDS)));
 
         let key = (name.clone(), record_type);
         let entry = CacheEntry {
             response: response.clone(),
             expires_at,
         };
+
+        // Remove old entry from LRU if updating
+        if self.entries.contains_key(&key) {
+            self.remove_from_lru(&key);
+        }
 
         self.entries.insert(key.clone(), entry);
         self.lru_keys.push_back(key);
@@ -89,7 +110,7 @@ impl Cache {
         }
     }
 
-    fn remove_from_lru(&mut self, key: &(Name, RecordType)) {
+    fn remove_from_lru(&mut self, key: &CacheKey) {
         if let Some(pos) = self.lru_keys.iter().position(|k| k == key) {
             self.lru_keys.remove(pos);
         }

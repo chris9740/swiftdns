@@ -29,6 +29,18 @@ use crate::{
 #[cfg(feature = "notify")]
 use crate::filter::observer;
 
+/// Default TTL (in seconds) for hosts file entries.
+const HOSTS_DEFAULT_TTL: u32 = 300;
+
+/// Default cache capacity (number of entries).
+const DEFAULT_CACHE_CAPACITY: usize = 1000;
+
+/// Duration to suppress duplicate log messages for the same domain.
+const BURST_DURATION: Duration = Duration::from_secs(15);
+
+/// Minimum interval between error log messages.
+const ERROR_LOG_INTERVAL: Duration = Duration::from_secs(15);
+
 pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
     let ctx = Arc::new(DnsContext::new(config).await?);
     let udp = udp::start_udp(addr, ctx.clone());
@@ -65,9 +77,9 @@ impl DnsContext {
         }
 
         let client = Client::connect(config).await?;
-        let cache = Arc::new(Mutex::new(Cache::new(1000)));
+        let cache = Arc::new(Mutex::new(Cache::new(DEFAULT_CACHE_CAPACITY)));
         let burst = Arc::new(Mutex::new(BurstTracker::new()));
-        let error_rl = Arc::new(Mutex::new(RateLimiter::new(Duration::from_secs(15))));
+        let error_rl = Arc::new(Mutex::new(RateLimiter::new(ERROR_LOG_INTERVAL)));
         let hosts = hosts::parse_hosts_file()?;
 
         Ok(DnsContext {
@@ -86,13 +98,15 @@ impl DnsContext {
         // This feature is not implemented or used in practice
         // and poses security risks (DNS amplification).
         // This implementation supports only single-query messages.
-        if message.queries().len() != 1 {
-            let mut response = create_response_base(message);
-            response.set_response_code(ResponseCode::FormErr);
-            return Ok(MessageResult::Response(response));
-        }
+        let query = match message.queries() {
+            [single_query] => single_query,
+            _ => {
+                let mut response = create_response_base(message);
+                response.set_response_code(ResponseCode::FormErr);
+                return Ok(MessageResult::Response(response));
+            }
+        };
 
-        let query = message.queries().first().expect("Query should exist");
         let domain: DnsName = match query.name().to_string().parse() {
             Ok(domain) => domain,
             Err(_) => {
@@ -119,7 +133,7 @@ impl DnsContext {
                             if let IpAddr::V4(v4) = ip {
                                 let record = Record::from_rdata(
                                     query.name().clone(),
-                                    300,
+                                    HOSTS_DEFAULT_TTL,
                                     RData::A(rdata::A(*v4)),
                                 );
                                 response.add_answer(record);
@@ -131,7 +145,7 @@ impl DnsContext {
                             if let IpAddr::V6(v6) = ip {
                                 let record = Record::from_rdata(
                                     query.name().clone(),
-                                    300,
+                                    HOSTS_DEFAULT_TTL,
                                     RData::AAAA(rdata::AAAA(*v6)),
                                 );
                                 response.add_answer(record);
@@ -217,14 +231,12 @@ impl DnsContext {
 
 struct BurstTracker {
     registry: HashMap<String, Instant>,
-    burst_duration_secs: Duration,
 }
 
 impl BurstTracker {
     fn new() -> Self {
         Self {
             registry: HashMap::new(),
-            burst_duration_secs: Duration::from_secs(15),
         }
     }
 
@@ -232,10 +244,10 @@ impl BurstTracker {
         let now = Instant::now();
 
         self.registry
-            .retain(|_, &mut t| now.duration_since(t) < self.burst_duration_secs);
+            .retain(|_, &mut t| now.duration_since(t) < BURST_DURATION);
 
         let is_bursting = match self.registry.get_mut(key) {
-            Some(ts) if now.duration_since(*ts) < self.burst_duration_secs => true,
+            Some(ts) if now.duration_since(*ts) < BURST_DURATION => true,
             _ => {
                 self.registry.insert(key.to_string(), now);
                 false

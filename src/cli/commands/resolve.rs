@@ -120,12 +120,6 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
         args.qtype,
     ));
 
-    let upstream_url = if std::env::var("SWIFTDNS_CLI_TEST_MODE").is_ok() {
-        "https://dns.swiftdns.mock/dns-query"
-    } else {
-        &config.resolver.url
-    };
-
     let response = upstream::resolve(&client, &config, &message).await?;
     let duration_ms = start.elapsed().as_millis();
 
@@ -154,8 +148,9 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
         return Ok(());
     }
 
-    let url = Url::parse(upstream_url)?;
-    println!("Upstream DNS: {}\n", url.host_str().unwrap_or("unknown"));
+    if let Ok(url) = Url::parse(&config.resolver.url) {
+        println!("Upstream DNS: {}\n", url.host_str().unwrap_or("unknown"));
+    }
     print_record_table(response.answers())?;
 
     let count = response.answers().len();

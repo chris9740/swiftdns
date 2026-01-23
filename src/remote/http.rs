@@ -74,6 +74,8 @@ impl Client {
             tor::proxy::validate(&result.client).await?;
         }
 
+        // In non-test builds, verify connectivity to the upstream resolver.
+        // This helps catch issues early on startup.
         #[cfg(not(test))]
         {
             let response = result.client.get(&config.resolver.url).send().await;

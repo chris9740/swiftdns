@@ -46,7 +46,7 @@ fn test_resolve_command() {
 
     assert
         .success()
-        .stdout(predicate::str::contains("Upstream DNS: dns.swiftdns.mock"))
+        .stdout(predicate::str::contains("Upstream DNS: cloudflare-dns.com"))
         .stdout(predicate::str::contains(
             "example.com  A (1)  300  93.184.216.34",
         ))
