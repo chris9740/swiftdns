@@ -11,7 +11,7 @@ Library             String
 *** Variables ***
 ${BINARY_PATH}      ${CURDIR}/../../target/debug/swiftdns
 ${CONFIG_PATH}      ${CURDIR}/test-config.toml
-${FILTER_DIR}       ${CURDIR}/../../assets/filters
+${FILTER_DIR}       ${CURDIR}/filters
 ${PORT}             55353
 
 
@@ -33,6 +33,8 @@ Create Basic Config
     ...    enabled = false
 
     Create File    ${CONFIG_PATH}    ${config_content}
+    Create Directory    ${FILTER_DIR}
+    Create File    ${FILTER_DIR}/meta.list    facebook.com
 
 Wait For Swiftdns UDP
     [Documentation]    Wait for Swiftdns to respond to a UDP query
@@ -89,7 +91,11 @@ Stop Swiftdns
 
     Wait Until Keyword Succeeds    5x    0.5s    Port Should Not Be Listening    ${PORT}
     ${config_exists}=    Run Keyword And Return Status    File Should Exist    ${CONFIG_PATH}
+    ${filter_exists}=    Run Keyword And Return Status    Directory Should Exist    ${FILTER_DIR}
     IF    ${config_exists}    Remove File    ${CONFIG_PATH}
+    IF    ${filter_exists}
+        Remove Directory    ${FILTER_DIR}    recursive=True
+    END
 
 Port Should Not Be Listening
     [Documentation]    Check that a port is not listening

@@ -26,8 +26,14 @@ pub struct SwiftConfig {
     pub blocking: BlockConfig,
     pub hosts: HostsConfig,
 
+    /// The path to the configuration file itself.
     #[serde(skip)]
     pub config_path: Option<PathBuf>,
+
+    /// The base directory for data files (filters, etc.).
+    /// Derived from the config file's parent directory.
+    #[serde(skip)]
+    pub data_dir: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -90,11 +96,33 @@ impl Default for SwiftConfig {
             },
             hosts: HostsConfig { enabled: false },
             config_path: None,
+            data_dir: None,
         }
     }
 }
 
 impl SwiftConfig {
+    /// Returns the filters directory path for this configuration.
+    ///
+    /// If a custom config file was specified, the filters directory is relative
+    /// to that config file's location. Otherwise, falls back to the default path.
+    pub fn filters_path(&self) -> Result<PathBuf, ConfigError> {
+        match &self.data_dir {
+            Some(data_dir) => Ok(data_dir.join("filters")),
+            None => get_filters_path(),
+        }
+    }
+
+    /// Returns the data directory for this configuration.
+    ///
+    /// This is the directory containing the config file and related data files.
+    pub fn data_dir(&self) -> Result<PathBuf, ConfigError> {
+        match &self.data_dir {
+            Some(data_dir) => Ok(data_dir.clone()),
+            None => get_config_path(),
+        }
+    }
+
     pub fn validate(&self) -> Result<(), ConfigError> {
         match url::Url::parse(&self.resolver.url) {
             Ok(url) => {
@@ -165,7 +193,16 @@ pub fn get_config_from_path(path: PathBuf) -> Result<SwiftConfig, ConfigError> {
         toml::from_str(&config_str).map_err(|e| ConfigError::DeserializeError(path.clone(), e))?;
 
     config.validate()?;
+
+    // Derive the data directory from the config file's parent directory.
+    // This allows all related files (filters, etc.) to be co-located with the config.
+    let data_dir = path
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+
     config.config_path = Some(path);
+    config.data_dir = Some(data_dir);
 
     Ok(config)
 }

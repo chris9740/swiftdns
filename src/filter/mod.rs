@@ -42,9 +42,27 @@ impl DomainFilter {
         Ok(filter)
     }
 
+    /// Creates a DomainFilter using the filters path from the given config.
+    ///
+    /// This respects custom config file locations - if a custom config was specified,
+    /// filters will be loaded from a `filters/` subdirectory relative to that config.
+    pub async fn from_config(config: &config::SwiftConfig) -> Result<Self, FilterError> {
+        let path = config.filters_path().map_err(FilterError::ConfigError)?;
+        DomainFilter::new(path).await
+    }
+
+    /// Creates a DomainFilter using the default filters path.
+    ///
+    /// Prefer `from_config()` when a config is available to respect custom
+    /// config file locations.
     pub async fn from_default_path() -> Result<Self, FilterError> {
         let path = config::get_filters_path().map_err(FilterError::ConfigError)?;
         DomainFilter::new(path).await
+    }
+
+    /// Returns the path to the filters directory being used by this filter.
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 
     pub async fn reload(&self) -> Result<(), FilterError> {

@@ -4,18 +4,18 @@ use tokio::{
     time::{sleep, Duration},
 };
 
-use crate::{
-    config,
-    filter::{types::FilterError, DomainFilter},
-};
+use crate::filter::{types::FilterError, DomainFilter};
 
 /// Starts watching the filter directory for changes.
 ///
 /// When filter files are modified, the domain filter is automatically reloaded.
 /// File change events are debounced to avoid excessive reloading.
+///
+/// The watch path is derived from the DomainFilter's configured path, which
+/// respects custom config file locations.
 pub async fn start_watching(filter: &DomainFilter) -> Result<(), FilterError> {
     let (tx, mut rx) = mpsc::channel(100);
-    let filter_path = config::get_filters_path().map_err(FilterError::ConfigError)?;
+    let filter_path = filter.path().to_path_buf();
     let filter_clone = filter.clone();
 
     let watcher_path = filter_path.clone();

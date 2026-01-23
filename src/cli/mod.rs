@@ -46,7 +46,7 @@ pub async fn start() -> Result<()> {
     };
 
     match args.command {
-        Commands::Check(args) => commands::check::execute(args).await,
+        Commands::Check(args) => commands::check::execute(args, &config).await,
         Commands::Config => commands::config::execute(&config).await,
         Commands::Start(args) => commands::start::execute(args, &config).await,
         Commands::Resolve(args) => commands::resolve::execute(args, &config).await,

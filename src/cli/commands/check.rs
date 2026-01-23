@@ -1,18 +1,21 @@
 use anyhow::Result;
 use colored::Colorize;
 
-use crate::filter::{
-    types::{FilterPattern, FilterResult},
-    DomainFilter,
+use crate::{
+    config::SwiftConfig,
+    filter::{
+        types::{FilterPattern, FilterResult},
+        DomainFilter,
+    },
 };
 
 pub use super::resolve::ResolveArgs as CheckArgs;
 
-pub async fn execute(args: CheckArgs) -> Result<()> {
+pub async fn execute(args: CheckArgs, config: &SwiftConfig) -> Result<()> {
     let filter = if std::env::var("SWIFTDNS_CLI_TEST_MODE").is_ok() {
         DomainFilter::from_mock_data()
     } else {
-        DomainFilter::from_default_path().await?
+        DomainFilter::from_config(config).await?
     };
 
     let format_rule_info = |rule: &FilterPattern| {

@@ -46,6 +46,9 @@ pub async fn start(addr: &SocketAddr, config: &SwiftConfig) -> Result<()> {
     let udp = udp::start_udp(addr, ctx.clone());
     let tcp = tcp::start_tcp(addr, ctx.clone());
 
+    if let Ok(data_dir) = config.data_dir() {
+        tracing::info!(data_dir=%data_dir.display(), "Using data directory");
+    }
     tracing::info!("Listening on {addr} via UDP and TCP");
 
     tokio::try_join!(udp, tcp)?;
@@ -70,7 +73,7 @@ struct DnsContext {
 
 impl DnsContext {
     async fn new(config: &SwiftConfig) -> Result<Self> {
-        let filter = DomainFilter::from_default_path().await?;
+        let filter = DomainFilter::from_config(config).await?;
         #[cfg(feature = "notify")]
         if let Err(e) = observer::start_watching(&filter).await {
             tracing::error!("Failed to start filter watcher: {}", e);

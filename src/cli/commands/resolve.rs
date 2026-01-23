@@ -93,7 +93,7 @@ pub async fn execute(args: ResolveArgs, config: &SwiftConfig) -> Result<()> {
     let filter = if std::env::var("SWIFTDNS_CLI_TEST_MODE").is_ok() {
         DomainFilter::from_mock_data()
     } else {
-        DomainFilter::from_default_path().await?
+        DomainFilter::from_config(&config).await?
     };
 
     if let FilterResult::Block(entry) = filter.check_domain(&args.domain.name()).await {
