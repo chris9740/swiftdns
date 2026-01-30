@@ -1,10 +1,12 @@
 use anyhow::Result;
 use std::{io::ErrorKind, process};
 use swiftdns::cli;
+#[cfg(feature = "logging")]
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    #[cfg(feature = "logging")]
     tracing_subscriber::fmt()
         .compact()
         .with_target(false)
