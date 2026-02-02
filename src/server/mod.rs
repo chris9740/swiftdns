@@ -187,38 +187,51 @@ impl DnsContext {
             }
         }
 
-        let mut cache = self.cache.lock().await;
-        let mut cached = false;
+        // We repurpose the CD flag to indicate cache bypass
+        let bypass_cache = message.header().checking_disabled();
 
-        let upstream_response =
-            if let Some(cached_response) = cache.get(query.name(), query.query_type()) {
-                cached = true;
-                cached_response
-            } else {
-                match upstream::resolve(&self.client, &self.config, message).await {
-                    Ok(response) => response,
-                    Err(err @ DnsError::NetworkError(_)) => {
-                        let mut error_rl = self.error_rl.lock().await;
-                        if error_rl.allow() {
-                            tracing::error!(error = %err, "Upstream network error");
-                        }
-                        return Err(err);
+        let mut cache = self.cache.lock().await;
+
+        let cached_response = if bypass_cache {
+            tracing::debug!(
+                domain = %query.name(),
+                query_type = ?query.query_type(),
+                "Cache bypass requested (CD flag set)",
+            );
+            None
+        } else {
+            cache.get(query.name(), query.query_type())
+        };
+
+        let (upstream_response, cached) = if let Some(response) = cached_response {
+            (response, true)
+        } else {
+            let response = match upstream::resolve(&self.client, &self.config, message).await {
+                Ok(response) => response,
+                Err(err @ DnsError::NetworkError(_)) => {
+                    let mut error_rl = self.error_rl.lock().await;
+                    if error_rl.allow() {
+                        tracing::error!(error = %err, "Upstream network error");
                     }
-                    Err(err) => {
-                        tracing::error!(error = %err, "Upstream query error");
-                        return Err(err);
-                    }
+                    return Err(err);
+                }
+                Err(err) => {
+                    tracing::error!(error = %err, "Upstream query error");
+                    return Err(err);
                 }
             };
+            (response, false)
+        };
 
         tracing::debug!(
             domain = %query.name(),
             query_type = ?query.query_type(),
             cached,
+            bypass_cache,
             "Cache lookup",
         );
 
-        if !cached {
+        if !cached && !bypass_cache {
             cache.insert(query.name(), query.query_type(), &upstream_response);
         }
 
