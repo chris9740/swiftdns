@@ -45,7 +45,7 @@ tokio-rustls = "0.24"
 rustls-native-certs = "0.6"
 url = "2.5.4"
 tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.19", features = [
+tracing-subscriber = { version = "0.3.20", features = [
     "env-filter",
     "std",
 ], optional = true }
